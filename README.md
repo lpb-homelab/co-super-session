@@ -38,7 +38,7 @@ A two-day shoot with five shots a day might look like this:
 └── 04_DOCS/
 ```
 
-A fashion shoot can go a level deeper. Here the brand Halden shoots its FW27 season. It uses two collections, NORDLYS and EMBER, as parent folders, with LOOKBOOK and EDITORIAL as subfolders. The lookbook shots use the prefix LOOK and the editorial shots use SET, numbering restarts in each folder, and the shot folders are named job_parent_shot so each folder and every capture in it carries the client, job, collection and subfolder:
+A fashion shoot can go a level deeper. Here the brand Halden shoots its FW27 season. It uses two collections, NORDLYS and EMBER, as parent folders, with LOOKBOOK and EDITORIAL as subfolders. The lookbook shots use the prefix L and the editorial shots use SET, and numbering restarts in each folder. The lookbook rows also get a pasted list of SKU codes (Paste list, Append), so each look folder carries its SKU. The shot folders are named job_parent_shot, so each folder and every capture in it carries the client, job, collection and subfolder:
 
 ```
 2027-02-15_HALDEN_FW27/
@@ -46,19 +46,19 @@ A fashion shoot can go a level deeper. Here the brand Halden shoots its FW27 sea
 │   ├── _prelight/
 │   ├── NORDLYS/
 │   │   ├── LOOKBOOK/
-│   │   │   ├── HALDEN_FW27_NORDLYS_LOOKBOOK_LOOK01/
-│   │   │   ├── HALDEN_FW27_NORDLYS_LOOKBOOK_LOOK02/
-│   │   │   ├── HALDEN_FW27_NORDLYS_LOOKBOOK_LOOK03/
-│   │   │   └── HALDEN_FW27_NORDLYS_LOOKBOOK_LOOK04/
+│   │   │   ├── HALDEN_FW27_NORDLYS_LOOKBOOK_L01_NL4102/
+│   │   │   ├── HALDEN_FW27_NORDLYS_LOOKBOOK_L02_NL4117/
+│   │   │   ├── HALDEN_FW27_NORDLYS_LOOKBOOK_L03_NL4125/
+│   │   │   └── HALDEN_FW27_NORDLYS_LOOKBOOK_L04_NL4139/
 │   │   └── EDITORIAL/
 │   │       ├── HALDEN_FW27_NORDLYS_EDITORIAL_SET01/
 │   │       └── HALDEN_FW27_NORDLYS_EDITORIAL_SET02/
 │   └── EMBER/
 │       ├── LOOKBOOK/
-│       │   ├── HALDEN_FW27_EMBER_LOOKBOOK_LOOK01/
-│       │   ├── HALDEN_FW27_EMBER_LOOKBOOK_LOOK02/
-│       │   ├── HALDEN_FW27_EMBER_LOOKBOOK_LOOK03/
-│       │   └── HALDEN_FW27_EMBER_LOOKBOOK_LOOK04/
+│       │   ├── HALDEN_FW27_EMBER_LOOKBOOK_L01_EM5208/
+│       │   ├── HALDEN_FW27_EMBER_LOOKBOOK_L02_EM5214/
+│       │   ├── HALDEN_FW27_EMBER_LOOKBOOK_L03_EM5231/
+│       │   └── HALDEN_FW27_EMBER_LOOKBOOK_L04_EM5246/
 │       └── EDITORIAL/
 │           ├── HALDEN_FW27_EMBER_EDITORIAL_SET01/
 │           └── HALDEN_FW27_EMBER_EDITORIAL_SET02/
@@ -68,7 +68,7 @@ A fashion shoot can go a level deeper. Here the brand Halden shoots its FW27 sea
 └── 04_DOCS/
 ```
 
-A capture in the second Ember look could then be named `HALDEN_FW27_EMBER_LOOKBOOK_LOOK02_0001`.
+A capture in the second Ember look could then be named `HALDEN_FW27_EMBER_LOOKBOOK_L02_EM5214_0001`.
 
 When the session is ready, Capture One opens on the first capture folder.
 
