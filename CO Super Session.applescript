@@ -91,6 +91,14 @@ property parentPath : ""
 property rowParents : {} -- shots table: one row per parent ("" = no parents)
 property rowNames : {}
 property rowCounts : {}
+property rowLists : {} -- pasted folder names per table row ({} = none)
+property rGroupLists : {} -- the pasted names of each shot group, parallel to rGroups
+property rAppend : true -- true: SHOT01_name; false: the pasted names replace prefix + number
+property rbAppend : missing value -- pasted names: Append (SHOT01_name) or Replace (name)
+property rbReplace : missing value
+property btnPaste : missing value
+property pastePanel : missing value
+property pasteView : missing value
 property defPrefix : "SHOT_"
 property defCount : "10"
 property wantNumbering : 1 -- what the user picked; used whenever it's available
@@ -138,6 +146,7 @@ on main()
 	set rowParents to {}
 	set rowNames to {}
 	set rowCounts to {}
+	set rowLists to {}
 	set modalCode to 0
 
 	-- Capture One runs scripts in a background osascript process; Cocoa UI must run on the main thread
@@ -181,6 +190,11 @@ on main()
 	my writePref("counterdigits", rCounter as text)
 	my writePref("separators", sepStyle as text)
 	my writePref("shotfolders", rShotsOn as text)
+	if rAppend then
+		my writePref("appendlist", "1")
+	else
+		my writePref("appendlist", "0")
+	end if
 	if prelightName is "" then
 		my writePref("prelight", "0")
 	else
@@ -351,11 +365,33 @@ on showWindow:arg
 	set fAllCounts to my addField(v, "", 98, y + 71, 45)
 	fAllCounts's setTag:300
 	fAllCounts's setToolTip:"Number of shots for every row in the table"
+	-- a pasted list of folder names for the selected row
+	set btnPaste to current application's NSButton's buttonWithTitle:"Paste list…" target:me action:"pasteList:"
+	btnPaste's setFrame:{{12, y + 34}, {145, 32}}
+	btnPaste's setToolTip:"Paste folder names, one per line, for the selected row"
+	v's addSubview:btnPaste
+	-- radio buttons sharing a superview and an action work as one group
+	set rbAppend to current application's NSButton's radioButtonWithTitle:"Append" target:me action:"shotsToggled:"
+	rbAppend's setFrame:{{18, y + 12}, {70, 18}}
+	rbAppend's setToolTip:"Pasted names go after the shot number: SHOT01_name"
+	set rbReplace to current application's NSButton's radioButtonWithTitle:"Replace" target:me action:"shotsToggled:"
+	rbReplace's setFrame:{{88, y + 12}, {75, 18}}
+	rbReplace's setToolTip:"Pasted names are the shot folders: no prefix, no number"
+	repeat with rb in {rbAppend, rbReplace}
+		((contents of rb)'s setControlSize:1)
+		((contents of rb)'s setFont:(current application's NSFont's systemFontOfSize:11))
+		(v's addSubview:(contents of rb))
+	end repeat
+	if my readPref("appendlist", "1") is "1" then
+		rbAppend's setState:1
+	else
+		rbReplace's setState:1
+	end if
 	set sv to current application's NSScrollView's alloc()'s initWithFrame:{{165, y}, {455, 130}}
 	sv's setHasVerticalScroller:true
 	sv's setBorderType:2
 	set tbl to current application's NSTableView's alloc()'s initWithFrame:{{0, 0}, {455, 130}}
-	repeat with c in {{"parent", "Parent", 140, false}, {"name", "Shot prefix", 210, true}, {"count", "Shots", 80, true}}
+	repeat with c in {{"parent", "Parent", 130, false}, {"name", "Shot prefix", 165, true}, {"count", "Shots", 60, true}, {"list", "List", 75, false}}
 		set {cid, ctitle, cw, ced} to contents of c
 		set col to (current application's NSTableColumn's alloc()'s initWithIdentifier:cid)
 		(col's headerCell()'s setStringValue:ctitle)
@@ -364,6 +400,8 @@ on showWindow:arg
 		(tbl's addTableColumn:col)
 	end repeat
 	tbl's setAllowsColumnReordering:false
+	tbl's setAllowsMultipleSelection:true -- ⌘A or ⌘/⇧-click: paste one list into several rows
+	tbl's setColumnAutoresizingStyle:0 -- sizeColumns fits them to their content
 	tbl's setUsesAlternatingRowBackgroundColors:true
 	tbl's setDataSource:me
 	tbl's setDelegate:me
@@ -373,7 +411,7 @@ on showWindow:arg
 	v's addSubview:sv
 
 	set y to my nextRow(16)
-	set hint to my addLabelAt(v, "Click a cell to edit. Shot prefixes are numbered automatically.", 165, y - 3, 455)
+	set hint to my addLabelAt(v, "Click a cell to edit, or List to paste folder names. Prefixes are numbered automatically.", 165, y - 3, 455)
 	hint's setFont:(current application's NSFont's systemFontOfSize:10)
 	hint's setTextColor:(current application's NSColor's secondaryLabelColor())
 
@@ -524,6 +562,8 @@ on refresh()
 	end try
 	set n to count of parentNames
 	set rGroups to {}
+	set rGroupLists to {}
+	set rAppend to ((rbAppend's state()) as integer is 1)
 	set shotsOn to ((cbShots's state()) as integer is 1)
 	if shotsOn then
 		set rShotsOn to 1
@@ -532,14 +572,27 @@ on refresh()
 	end if
 	tbl's setEnabled:shotsOn
 	fAllCounts's setEnabled:shotsOn
+	btnPaste's setEnabled:(shotsOn and (tbl's numberOfSelectedRows()) as integer > 0)
+	set anyList to false
+	repeat with L in rowLists
+		if contents of L is not {} then set anyList to true
+	end repeat
+	rbAppend's setEnabled:(shotsOn and anyList)
+	rbReplace's setEnabled:(shotsOn and anyList)
 	if not shotsOn then
 		-- no numbered shot folders
 	else if n is 0 then
 		if (count of rowNames) > 0 then
 			set nm to my trim(item 1 of rowNames)
-			set c to my parseCount(item 1 of rowCounts, 1, "Number of shots must be a whole number from 1 to 999.")
+			set L to my cleanList(item 1 of rowLists)
+			if L is {} then
+				set c to my parseCount(item 1 of rowCounts, 1, "Number of shots must be a whole number from 1 to 999.")
+			else
+				set c to count of L
+			end if
 			if nm contains "/" or nm contains ":" then my addProblem("Please don't use / or : in the shot prefix.")
 			set rGroups to {{"", nm, c}}
+			set rGroupLists to {L}
 		end if
 	else
 		-- one table row per direct parent (with subfolders: per subfolder, shared by every parent)
@@ -548,9 +601,15 @@ on refresh()
 			set r to my posOfText(my lastComponent(p), rowParents)
 			if r > 0 and r ≤ (count of rowNames) then
 				set nm to my trim(item r of rowNames)
-				set c to my parseCount(item r of rowCounts, 1, my lastComponent(p) & ": number of shots must be a whole number from 1 to 999.")
+				set L to my cleanList(item r of rowLists)
+				if L is {} then
+					set c to my parseCount(item r of rowCounts, 1, my lastComponent(p) & ": number of shots must be a whole number from 1 to 999.")
+				else
+					set c to count of L
+				end if
 				if nm contains "/" or nm contains ":" then my addProblem(my lastComponent(p) & ": please don't use / or : in the shot prefix.")
 				set end of rGroups to {p, nm, c}
+				set end of rGroupLists to L
 			end if
 		end repeat
 	end if
@@ -563,7 +622,7 @@ on refresh()
 		set rNumbering to wantNumbering
 		set titles to {}
 		repeat with k from 1 to 3
-			set end of titles to item k of numTitles & "  (" & my rangePreview(my numberGroups(rGroups, item k of numberingOrder), rDigits) & ")"
+			set end of titles to item k of numTitles & "  (" & my rangePreview(my numberGroups(my numberInput(rGroups), item k of numberingOrder), rDigits) & ")"
 		end repeat
 	else
 		set rNumbering to 2
@@ -574,8 +633,15 @@ on refresh()
 
 	-- shot folder naming; mode ids: 1 shot, 2 job_shot, 3 parent_shot, 4 job_parent_shot, 5 date_job_parent_shot, 6 date_job_shot
 	if ng > 0 then
-		set {p1, n1, s1, c1} to item 1 of my numberGroups(rGroups, rNumbering)
-		set firstShot to n1 & my pad(s1, rDigits)
+		set {p1, n1, s1, c1} to item 1 of my numberGroups(my numberInput(rGroups), rNumbering)
+		set L1 to item 1 of rGroupLists
+		if L1 is {} then
+			set firstShot to n1 & my pad(s1, rDigits)
+		else if rAppend then
+			set firstShot to n1 & my pad(s1, rDigits) & partSep & item 1 of L1
+		else
+			set firstShot to item 1 of L1
+		end if
 		set ids to {1, 2}
 		set labels to {"shot  (" & firstShot & ")", "job_shot  (" & rJob & partSep & firstShot & ")"}
 		if n > 0 then
@@ -600,6 +666,22 @@ on refresh()
 
 	if ng > 0 then
 		set rShotNames to my makeShotNames(rGroups, rDigits, rNumbering, rMode, rJob, rSession)
+		-- pasted names can repeat; two folders with the same path would merge
+		set seen to {}
+		set dupes to {}
+		considering case
+			repeat with x in rShotNames
+				set x to contents of x
+				if {x} is in seen then
+					if {x} is not in dupes then set end of dupes to x
+				else
+					set end of seen to x
+				end if
+			end repeat
+		end considering
+		repeat with x in dupes
+			my addProblem("Two shot folders would both be named “" & x & "”. Check the pasted list.")
+		end repeat
 	else
 		-- shot folders off: capture into the parent folders, or straight into RAW
 		set rShotNames to parentNames
@@ -664,6 +746,7 @@ on refresh()
 		previewView's setTextColor:(current application's NSColor's systemRedColor())
 	end if
 	createBtn's setEnabled:(problem is "")
+	if (tbl's editedRow()) as integer < 0 then my sizeColumns() -- not while a cell is being typed in
 	my fitPreview()
 	my updateSepTips()
 end refresh
@@ -953,7 +1036,14 @@ on syncRows()
 	end considering
 	set newNames to {}
 	set newCounts to {}
+	set newLists to {}
 	repeat with i from 1 to count of names
+		-- a pasted list belongs to its row only; new rows start without one
+		if i ≤ (count of rowLists) then
+			set end of newLists to item i of rowLists
+		else
+			set end of newLists to {}
+		end if
 		if i ≤ (count of rowNames) then
 			set nm to item i of rowNames
 			set c to item i of rowCounts
@@ -976,6 +1066,7 @@ on syncRows()
 	set rowParents to names
 	set rowNames to newNames
 	set rowCounts to newCounts
+	set rowLists to newLists
 	tbl's reloadData()
 end syncRows
 
@@ -1050,8 +1141,78 @@ end chooseLocation:
 on tableClicked:sender
 	set c to (tbl's clickedColumn()) as integer
 	set r to (tbl's clickedRow()) as integer
-	if c > 0 and r ≥ 0 then tbl's editColumn:c row:r withEvent:(missing value) |select|:true
+	if c < 0 or r < 0 then return
+	-- ⌘ or ⇧ click: only change the selection
+	set flags to (current application's NSApplication's sharedApplication()'s currentEvent()'s modifierFlags()) as integer
+	if (flags div 1048576) mod 2 is 1 or (flags div 131072) mod 2 is 1 then return
+	set col to item (c + 1) of (tbl's tableColumns() as list)
+	if (col's identifier()) as text is "list" then
+		-- a click inside a multiple selection pastes into all of it
+		set rows to my selectedRows()
+		if (r + 1) is not in rows then set rows to {r + 1}
+		my openPaste(rows)
+	else if c > 0 and my canEdit(col, r + 1) then
+		tbl's editColumn:c row:r withEvent:(missing value) |select|:true
+	end if
 end tableClicked:
+
+-- Fits Parent, Shots and List to their widest text; Shot prefix gets the rest of the width
+on sizeColumns()
+	set cols to tbl's tableColumns() as list
+	set avail to ((tbl's enclosingScrollView()'s contentSize())'s width) as real
+	set gap to ((tbl's intercellSpacing())'s width) as real
+	set wants to {}
+	repeat with col in cols
+		set f to (col's dataCell()'s |font|())
+		set attrs to (current application's NSDictionary's dictionaryWithObject:f forKey:(current application's NSFontAttributeName))
+		set w to ((((current application's NSString's stringWithString:((col's headerCell()'s stringValue()) as text))'s sizeWithAttributes:attrs)'s width) as real) + 12
+		repeat with r from 0 to (count of rowNames) - 1
+			set t to (my tableView:tbl objectValueForTableColumn:col row:r) as text
+			set cw to ((((current application's NSString's stringWithString:t)'s sizeWithAttributes:attrs)'s width) as real) + 10
+			if cw > w then set w to cw
+		end repeat
+		set end of wants to w
+	end repeat
+	set {wP, wN, wC, wL} to wants
+	set wC to my clampInt(wC, 50, 90)
+	set wL to my clampInt(wL, 60, 100)
+	set spare to avail - wC - wL - 4 * gap
+	-- the parent gets what it needs, but leaves the prefix at least 120
+	if wP > spare - 120 then set wP to spare - 120
+	if wP < 70 then set wP to 70
+	set wN to spare - wP
+	repeat with k from 1 to 4
+		((item k of cols)'s setWidth:(item k of {wP, wN, wC, wL}))
+	end repeat
+end sizeColumns
+
+-- with a pasted list the count comes from the list, and in replace mode the prefix isn't used
+on canEdit(col, i)
+	if i > (count of rowLists) then return true
+	if item i of rowLists is {} then return true
+	set cid to (col's identifier()) as text
+	if cid is "count" then return false
+	if cid is "name" and not rAppend then return false
+	return true
+end canEdit
+
+on tableView:tv shouldEditTableColumn:col row:r
+	return my canEdit(col, (r as integer) + 1)
+end tableView:shouldEditTableColumn:row:
+
+on tableView:tv willDisplayCell:cell forTableColumn:col row:r
+	if my canEdit(col, (r as integer) + 1) then
+		cell's setTextColor:(current application's NSColor's labelColor())
+	else
+		cell's setTextColor:(current application's NSColor's tertiaryLabelColor())
+	end if
+end tableView:willDisplayCell:forTableColumn:row:
+
+on tableViewSelectionDidChange:aNotification
+	if btnPaste is missing value then return
+	set shotsOn to ((cbShots's state()) as integer is 1)
+	btnPaste's setEnabled:(shotsOn and (tbl's numberOfSelectedRows()) as integer > 0)
+end tableViewSelectionDidChange:
 
 on numberOfRowsInTableView:tv
 	return count of rowNames
@@ -1067,9 +1228,16 @@ on tableView:tv objectValueForTableColumn:col row:r
 		return my lastComponent(p) -- direct parent only; the full path is in the preview
 	else if cid is "name" then
 		return item i of rowNames
-	else
-		return item i of rowCounts
 	end if
+	set L to {}
+	if i ≤ (count of rowLists) then set L to my cleanList(item i of rowLists)
+	if cid is "list" then
+		if L is {} then return "–"
+		if (count of L) is 1 then return "1 name"
+		return ((count of L) as text) & " names"
+	end if
+	if L is not {} then return (count of L) as text
+	return item i of rowCounts
 end tableView:objectValueForTableColumn:row:
 
 on tableView:tv setObjectValue:val forTableColumn:col row:r
@@ -1082,6 +1250,118 @@ on tableView:tv setObjectValue:val forTableColumn:col row:r
 	if cid is "count" then set item i of rowCounts to t
 	my refresh()
 end tableView:setObjectValue:forTableColumn:row:
+
+---------- PASTE LIST ----------
+on pasteList:sender
+	my openPaste(my selectedRows())
+end pasteList:
+
+-- selected table rows, 1-based
+on selectedRows()
+	set out to {}
+	set idx to tbl's selectedRowIndexes()
+	repeat with k from 0 to (count of rowNames) - 1
+		if (idx's containsIndex:k) as boolean then set end of out to k + 1
+	end repeat
+	return out
+end selectedRows
+
+-- A small window on top: one folder name per line, for one or more table rows
+on openPaste(rows)
+	if rows is {} then return
+	if (cbShots's state()) as integer is not 1 then return
+	set i to item 1 of rows
+	if i > (count of rowNames) then return
+	set anyList to false
+	repeat with k in rows
+		if item k of rowLists is not {} then set anyList to true
+	end repeat
+	win's makeFirstResponder:(missing value) -- commits a table cell still being edited
+	set nsApp to current application's NSApplication's sharedApplication()
+	set pp to item i of rowParents
+	if pp is "" then
+		set pp to rawName
+	else
+		set pp to my lastComponent(pp)
+	end if
+	set pw to current application's NSPanel's alloc()'s initWithContentRect:{{0, 0}, {440, 380}} styleMask:1 backing:2 defer:false
+	if (count of rows) is (count of rowNames) and (count of rows) > 1 then
+		set pp to "all " & (count of rows) & " rows"
+	else if (count of rows) > 1 then
+		set pp to (count of rows) & " rows"
+	end if
+	pw's setTitle:("Shot folder names: " & pp)
+	pw's setReleasedWhenClosed:false
+	pw's setLevel:8 -- above the main window
+	set pastePanel to pw
+	set v to pw's contentView()
+	set l to current application's NSTextField's wrappingLabelWithString:"One folder name per line, in shot order. Spaces become dashes; / and : are removed."
+	l's setFrame:{{20, 330}, {400, 34}}
+	v's addSubview:l
+	set sv to current application's NSScrollView's alloc()'s initWithFrame:{{20, 60}, {400, 262}}
+	sv's setHasVerticalScroller:true
+	sv's setBorderType:2
+	set tv to current application's NSTextView's alloc()'s initWithFrame:{{0, 0}, {385, 262}}
+	tv's setRichText:false
+	tv's setAllowsUndo:true
+	tv's setFont:(current application's NSFont's monospacedSystemFontOfSize:12 weight:0)
+	tv's setAutomaticQuoteSubstitutionEnabled:false
+	tv's setAutomaticDashSubstitutionEnabled:false
+	tv's setAutomaticTextReplacementEnabled:false
+	tv's setAutomaticSpellingCorrectionEnabled:false
+	tv's setTextContainerInset:{4, 6}
+	set AppleScript's text item delimiters to linefeed
+	tv's setString:((item i of rowLists) as text)
+	set AppleScript's text item delimiters to ""
+	sv's setDocumentView:tv
+	v's addSubview:sv
+	set pasteView to tv
+	set b to current application's NSButton's buttonWithTitle:"Remove list" target:me action:"pasteButton:"
+	b's setFrame:{{14, 13}, {120, 32}}
+	b's setTag:2
+	b's setEnabled:anyList
+	v's addSubview:b
+	set b to current application's NSButton's buttonWithTitle:"Cancel" target:me action:"pasteButton:"
+	b's setFrame:{{220, 13}, {100, 32}}
+	b's setTag:0
+	b's setKeyEquivalent:(character id 27)
+	v's addSubview:b
+	set b to current application's NSButton's buttonWithTitle:"OK" target:me action:"pasteButton:"
+	b's setFrame:{{320, 13}, {106, 32}}
+	b's setTag:1
+	-- ⌘Return: a plain Return adds a new line
+	b's setKeyEquivalent:return
+	b's setKeyEquivalentModifierMask:(current application's NSEventModifierFlagCommand)
+	b's setToolTip:"⌘Return"
+	v's addSubview:b
+	pw's |center|()
+	pw's makeKeyAndOrderFront:me
+	pw's makeFirstResponder:tv
+	tv's selectAll:me
+	set code to (nsApp's runModalForWindow:pw) as integer
+	set t to (tv's |string|()) as text
+	pw's orderOut:me
+	set {pastePanel, pasteView} to {missing value, missing value}
+	if code is 0 then return
+	set newList to {}
+	if code is 1 then
+		set parts to ((current application's NSString's stringWithString:t)'s componentsSeparatedByCharactersInSet:(current application's NSCharacterSet's newlineCharacterSet())) as list
+		repeat with x in parts
+			set x to my trim(my regexReplace(contents of x, "\t+", " "))
+			if x is not "" then set end of newList to x
+		end repeat
+	end if
+	repeat with k in rows
+		set item k of rowLists to newList
+	end repeat
+	tbl's reloadData()
+	win's makeKeyWindow()
+	my refresh()
+end openPaste
+
+on pasteButton:sender
+	current application's NSApplication's sharedApplication()'s stopModalWithCode:((sender's tag()) as integer)
+end pasteButton:
 
 on buttonClicked:sender
 	set code to (sender's tag()) as integer
@@ -1109,6 +1389,8 @@ on releaseWindow()
 	end try
 	set {win, cbParents} to {missing value, missing value}
 	set tbl to missing value
+	set {rbAppend, rbReplace} to {missing value, missing value}
+	set {btnPaste, pastePanel, pasteView} to {missing value, missing value, missing value}
 	set {fClient, cbSub, fAllCounts, fFileName} to {missing value, missing value, missing value, missing value}
 	set {fLocation, fJob, fDateFmt, fDate, fPhotog, parentScroll, parentDoc} to {missing value, missing value, missing value, missing value, missing value, missing value, missing value}
 	set {rbSep, fFolders, cbShots, cbPrelight, fPrelight} to {{}, {}, missing value, missing value, missing value}
@@ -1250,32 +1532,50 @@ end pathExists
 -- Relative folder paths inside RAW, e.g. {"Studio/LOOK_01", "Studio/LOOK_02", "Rooftop/S03"}
 on makeShotNames(groups, digits, numberingMode, modeIndex, jobName, sessionName)
 	set out to {}
-	repeat with g in my numberGroups(groups, numberingMode)
+	set gi to 0
+	repeat with g in my numberGroups(my numberInput(groups), numberingMode)
+		set gi to gi + 1
 		set {p, n, s, c} to contents of g
+		set L to {}
+		if gi ≤ (count of rGroupLists) then set L to item gi of rGroupLists
 		-- sessionName is date_job; modes 3-5 only exist when there are parents
 		if p is "" then
 			set pp to ""
 		else
 			set pp to my pName(p) & partSep
 		end if
+		-- pre: what comes before the shot prefix
 		if modeIndex is 2 then
-			set fullPrefix to jobName & partSep & n
+			set pre to jobName & partSep
 		else if modeIndex is 3 then
-			set fullPrefix to pp & n
+			set pre to pp
 		else if modeIndex is 4 then
-			set fullPrefix to jobName & partSep & pp & n
+			set pre to jobName & partSep & pp
 		else if modeIndex is 5 then
-			set fullPrefix to sessionName & partSep & pp & n
+			set pre to sessionName & partSep & pp
 		else if modeIndex is 6 then
-			set fullPrefix to sessionName & partSep & n
+			set pre to sessionName & partSep
 		else
-			set fullPrefix to n
+			set pre to ""
 		end if
-		repeat with i from s to s + c - 1
+		set leaves to {}
+		if L is not {} and not rAppend then
+			-- the pasted names replace prefix + number
+			repeat with x in L
+				set end of leaves to pre & (contents of x)
+			end repeat
+		else
+			repeat with i from s to s + c - 1
+				set leaf to pre & n & my pad(i, digits)
+				if L is not {} then set leaf to leaf & partSep & item (i - s + 1) of L
+				set end of leaves to leaf
+			end repeat
+		end if
+		repeat with leaf in leaves
 			if p is "" then
-				set end of out to fullPrefix & my pad(i, digits)
+				set end of out to contents of leaf
 			else
-				set end of out to p & "/" & fullPrefix & my pad(i, digits)
+				set end of out to p & "/" & (contents of leaf)
 			end if
 		end repeat
 	end repeat
@@ -1498,6 +1798,29 @@ on splitParents(t)
 	return out
 end splitParents
 
+-- Groups whose pasted names replace prefix + number take no shot numbers (count 0)
+on numberInput(groups)
+	set out to {}
+	repeat with i from 1 to count of groups
+		set {p, nm, c} to item i of groups
+		if not rAppend and i ≤ (count of rGroupLists) then
+			if item i of rGroupLists is not {} then set c to 0
+		end if
+		set end of out to {p, nm, c}
+	end repeat
+	return out
+end numberInput
+
+-- Pasted lines -> folder names: / and : dropped, spaces and the other separator become dashes
+on cleanList(pasted)
+	set out to {}
+	repeat with x in pasted
+		set nm to my spacesToDashes(my regexReplace(contents of x, "[/:]+", " "))
+		if nm is not "" then set end of out to nm
+	end repeat
+	return out
+end cleanList
+
 -- Adds the first number to each {parent, name, count} group -> {parent, name, first, count}.
 -- numberingMode 1: parents sharing a shot name continue its count; a different shot name starts at 1
 --               2: every parent starts at 1
@@ -1534,12 +1857,18 @@ end numberGroups
 -- "Studio/S01-03, Rooftop/S04-05, …" for the first four groups
 on rangePreview(numbered, digits)
 	set out to {}
+	set more to false
 	repeat with i from 1 to (count of numbered)
-		if i > 4 then exit repeat
 		set {p, n, s, c} to item i of numbered
-		set end of out to p & "/" & n & my pad(s, digits) & "-" & my pad(s + c - 1, digits)
+		if c > 0 then
+			if (count of out) is 4 then
+				set more to true
+				exit repeat
+			end if
+			set end of out to p & "/" & n & my pad(s, digits) & "-" & my pad(s + c - 1, digits)
+		end if
 	end repeat
-	if (count of numbered) > 4 then set end of out to "…"
+	if more then set end of out to "…"
 	set oldTID to AppleScript's text item delimiters
 	set AppleScript's text item delimiters to ", "
 	set r to out as text
