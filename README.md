@@ -1,8 +1,8 @@
-# CO Super Session
+# CO SuperSession
 
 A Capture One 16 script that sets up a complete, consistently named session from a single window.
 
-Starting a shoot in Capture One usually means creating the session, renaming its folders, making a folder for every shot, setting the capture naming and adding copyright. CO Super Session does all of that at once. You enter the client, the job and how the shoot is organised, check the preview, and start capturing.
+Starting a shoot in Capture One usually means creating the session, renaming its folders, making a folder for every shot, setting the capture naming and adding copyright. CO SuperSession does all of that at once. You enter the client, the job and how the shoot is organised, check the preview, and start capturing.
 
 ## What it does
 
@@ -81,15 +81,15 @@ Writing copyright directly needs Capture One Studio. Without Studio, the script 
 
 ## Installation
 
-1. Download the latest **CO-Super-Session** zip from the [Releases page](../../releases) and double-click it to unzip.
-2. In Capture One, choose **Scripts › Open Scripts Folder** and drag **CO Super Session.scpt** into the folder that opens.
-3. Choose **Scripts › Update Scripts Menu**, then **Scripts › CO Super Session**.
+1. Download the latest **CO-SuperSession** zip from the [Releases page](../../releases) and double-click it to unzip.
+2. In Capture One, choose **Scripts › Open Scripts Folder** and drag **CO SuperSession.scpt** into the folder that opens.
+3. Choose **Scripts › Update Scripts Menu**, then **Scripts › CO SuperSession**.
 
 To update, do the same with the newer version and replace the old file. The version you have is shown in the script's window title.
 
 ## Customising
 
-A few defaults live at the top of `CO Super Session.applescript`, including a session template to start from and a copyright style for users without Studio. To change them, download the source, edit the file and run `./install.sh` from its folder in Terminal. This builds the script and installs it in Capture One's Scripts folder.
+A few defaults live at the top of `CO SuperSession.applescript`, including a session template to start from and a copyright style for users without Studio. To change them, download the source, edit the file and run `./install.sh` from its folder in Terminal. This builds the script and installs it in Capture One's Scripts folder.
 
 ## Credits
 
@@ -97,4 +97,4 @@ Originally written in 2019 as SuperSession by Louis-Philippe Beauduin. Rewritten
 
 ## License
 
-Copyright © 2026 Louis-Philippe Beauduin. CO Super Session is free software under the [GNU General Public License v3.0](LICENSE) or any later version. You can use, share and change it. If you share a changed version, you must release its source under the same licence.
+Copyright © 2026 Louis-Philippe Beauduin. CO SuperSession is free software under the [GNU General Public License v3.0](LICENSE) or any later version. You can use, share and change it. If you share a changed version, you must release its source under the same licence.

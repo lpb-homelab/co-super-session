@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")"
 DEST="$HOME/Library/Scripts/Capture One Scripts"
 mkdir -p build "$DEST"
-for SRC in "CO Super Session.applescript"; do
+for SRC in "CO SuperSession.applescript"; do
 	NAME="${SRC%.applescript}"
 	osacompile -o "build/$NAME.scpt" "$SRC"
 	cp "build/$NAME.scpt" "$DEST/"
