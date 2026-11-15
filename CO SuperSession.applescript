@@ -78,6 +78,10 @@ property pCounter : missing value
 property rbSep : {} -- separator radio buttons
 property previewView : missing value
 property fFileName : missing value -- the resulting file name, shown large above the summary
+property formView : missing value -- the 640-wide form, kept centred when the window is widened
+property userW : 640 -- window width the user dragged to (remembered between runs)
+property dragStart : missing value -- {mouse x, frame x, frame width, edge sign} while the user drags an edge
+property inSymResize : false -- guards windowDidResize against its own setFrame
 
 -- separators: 1 ISO 8601 (dates with -, parts joined with _, spaces in names become -),
 -- 2 all dashes, 3 all underscores, 4 the opposite of ISO 8601 (a joke: _ in dates and names, - between parts)
@@ -243,14 +247,22 @@ on showWindow:arg
 	set winH to 852 + ((my visibleParentRows()) - 1) * 30
 	if askPhotographer then set winH to winH + 32
 	set cursorTop to 20
-	set w to current application's NSWindow's alloc()'s initWithContentRect:{{0, 0}, {640, winH}} styleMask:3 backing:2 defer:false
+	set userW to my prefInt("winwidth", 640)
+	-- titled, closable, resizable: the width can be dragged, the height is locked (lockHeight)
+	set w to current application's NSWindow's alloc()'s initWithContentRect:{{0, 0}, {640, winH}} styleMask:11 backing:2 defer:false
 	w's setTitle:("CO SuperSession " & scriptVersion)
 	w's setReleasedWhenClosed:false
 	w's setDelegate:me
 	w's setLevel:3 -- floating, stays above Capture One
 	w's setAutorecalculatesKeyViewLoop:true -- Tab also reaches parent fields added later
 	set win to w
-	set v to w's contentView()
+	set cv to w's contentView()
+	-- the form lives in a fixed-width view that stays centred (flexible left and right margins)
+	-- and follows the window's height; the file name, preview and buttons stretch with the window
+	set v to current application's NSView's alloc()'s initWithFrame:{{0, 0}, {640, winH}}
+	v's setAutoresizingMask:21
+	cv's addSubview:v
+	set formView to v
 
 	-- client first (the broader one), then the job; together they form the job part of the names
 	set y to my nextRow(24)
@@ -468,9 +480,11 @@ on showWindow:arg
 	pCounter's selectItemAtIndex:((my clampInt(my prefInt("counterdigits", 4), 1, 6)) - 1)
 
 	-- the end result: what the files will be called
+	set v to cv
 	set y to my nextRow(32)
 	set fFileName to current application's NSTextField's labelWithString:""
 	fFileName's setFrame:{{20, y}, {600, 30}}
+	fFileName's setAutoresizingMask:2 -- wider with the window
 	fFileName's setAlignment:(current application's NSTextAlignmentCenter)
 	fFileName's setFont:(current application's NSFont's monospacedSystemFontOfSize:17 weight:0.4)
 	fFileName's setTextColor:(current application's NSColor's controlAccentColor())
@@ -483,7 +497,9 @@ on showWindow:arg
 	set psv to current application's NSScrollView's alloc()'s initWithFrame:{{20, 60}, {600, ph}}
 	psv's setHasVerticalScroller:true
 	psv's setBorderType:2
+	psv's setAutoresizingMask:2
 	set previewView to current application's NSTextView's alloc()'s initWithFrame:{{0, 0}, {590, ph}}
+	previewView's setAutoresizingMask:2
 	previewView's setEditable:false
 	previewView's setFont:(current application's NSFont's monospacedSystemFontOfSize:11 weight:0)
 	previewView's setTextContainerInset:{8, 8}
@@ -500,9 +516,12 @@ on showWindow:arg
 	cancelBtn's setKeyEquivalent:(character id 27)
 	set createBtn to my addButton(v, "Create Session", 495, 130, 1)
 	createBtn's setKeyEquivalent:return
+	cancelBtn's setAutoresizingMask:1 -- buttons stay at the right edge
+	createBtn's setAutoresizingMask:1
 
 	my syncRows()
 	my refresh()
+	my lockHeight()
 	w's |center|()
 	nsApp's activateIgnoringOtherApps:true
 	w's makeKeyAndOrderFront:me
@@ -980,6 +999,7 @@ on rebuildParentRows(focusTag)
 	if delta is not 0 then
 		set {{fx, fy}, {fw, fh}} to win's frame()
 		win's setFrame:{{fx, fy - delta}, {fw, fh + delta}} display:true
+		my lockHeight()
 	end if
 	set isOn to ((cbParents's state()) as integer is 1)
 	set docH to (my parentRows()) * 30
@@ -1512,7 +1532,7 @@ on releaseWindow()
 		end if
 		if win is not missing value then win's setDelegate:(missing value)
 	end try
-	set {win, cbParents} to {missing value, missing value}
+	set {win, cbParents, formView} to {missing value, missing value, missing value}
 	set tbl to missing value
 	set {rbAppend, rbReplace} to {missing value, missing value}
 	set {btnPaste, pastePanel, pasteView} to {missing value, missing value, missing value}
@@ -2167,12 +2187,15 @@ on fitPreview()
 		set {{sx, sy}, {sw, sh}} to sv's frame()
 		if (sv's isEqual:psv) as boolean then
 			(sv's setFrame:{{sx, sy}, {sw, sh + delta}})
+		else if (sv's isEqual:formView) as boolean then
+			(sv's setFrameOrigin:{sx, sy + delta})
 		else if sy ≥ py + ph - 1 then
 			(sv's setFrameOrigin:{sx, sy + delta})
 		end if
 	end repeat
 	cv's setAutoresizesSubviews:true
 	cv's setNeedsDisplay:true
+	my lockHeight()
 end fitPreview
 
 -- position of text in a list, case-sensitive; 0 if not there
@@ -2238,29 +2261,67 @@ on digitsAt(t, i, n)
 end digitsAt
 
 -- Widens the window (evenly on both sides) when the file name doesn't fit, and narrows it
--- back to the normal 640 when it does; the form stays centred
+-- back to the width the user chose (640 at least) when it does; the form stays centred
 on fitWidth()
 	set sz to fFileName's attributedStringValue()'s |size|()
 	set needW to ((width of sz) as integer) + 60
+	if needW < userW then set needW to userW
 	if needW < 640 then set needW to 640
-	set cv to win's contentView()
-	set {{cx, cy}, {cw, ch}} to cv's frame()
+	set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
 	set {{vx, vy}, {vw, vh}} to win's screen()'s visibleFrame()
 	if needW > vw then set needW to vw as integer
 	set half to (needW - cw) div 2
 	if half is 0 then return
-	set delta to half * 2
 	set {{fx, fy}, {fw, fh}} to win's frame()
-	cv's setAutoresizesSubviews:false
-	win's setFrame:{{fx - half, fy}, {fw + delta, fh}} display:false
-	repeat with sv in (cv's subviews() as list)
-		set {{sx, sy}, {sw, sh}} to sv's frame()
-		if (sv's isEqual:fFileName) as boolean then
-			(sv's setFrame:{{20, sy}, {cw + delta - 40, sh}})
-		else
-			(sv's setFrameOrigin:{sx + half, sy})
-		end if
-	end repeat
-	cv's setAutoresizesSubviews:true
-	cv's setNeedsDisplay:true
+	win's setFrame:{{fx - half, fy}, {fw + half * 2, fh}} display:true
 end fitWidth
+
+-- Only the width can be dragged: min and max height are the current height
+on lockHeight()
+	set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
+	win's setContentMinSize:{640, ch}
+	win's setContentMaxSize:{100000, ch}
+end lockHeight
+
+-- keeps the form exactly centred, whatever the rounding of the autoresizing
+-- Dragging either side edge widens or narrows the window on both sides at once
+on windowWillStartLiveResize:aNotification
+	set mx to (x of (current application's NSEvent's mouseLocation())) as real
+	set {{fx, fy}, {fw, fh}} to win's frame()
+	set edgeSign to 1
+	if mx < fx + fw / 2 then set edgeSign to -1 -- the left edge
+	set dragStart to {mx, fx as real, fw as real, edgeSign}
+end windowWillStartLiveResize:
+
+on windowDidResize:aNotification
+	if formView is missing value then return
+	if dragStart is not missing value and not inSymResize and (win's inLiveResize()) as boolean then
+		-- the new width comes from the mouse alone, so AppKit's own frame each step doesn't add up
+		set {mx0, fx0, fw0, edgeSign} to dragStart
+		set mx to (x of (current application's NSEvent's mouseLocation())) as real
+		set newW to fw0 + 2 * edgeSign * (mx - mx0)
+		set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
+		set {{fx, fy}, {fw, fh}} to win's frame()
+		set minW to 640 + (fw - cw) -- frame width for the 640 content minimum
+		if newW < minW then set newW to minW
+		set {{vx, vy}, {vw, vh}} to win's screen()'s visibleFrame()
+		if newW > vw then set newW to vw
+		set newW to newW as integer
+		set newX to (fx0 + (fw0 - newW) / 2) as integer
+		set inSymResize to true
+		win's setFrame:{{newX, fy}, {newW, fh}} display:true
+		set inSymResize to false
+	end if
+	set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
+	set {{sx, sy}, {sw, sh}} to formView's frame()
+	formView's setFrameOrigin:{((cw - sw) div 2), sy}
+end windowDidResize:
+
+-- a width dragged by hand is kept for the rest of this run and the next ones
+on windowDidEndLiveResize:aNotification
+	set dragStart to missing value
+	set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
+	set userW to cw as integer
+	my writePref("winwidth", userW)
+	my fitWidth() -- a file name wider than the chosen width still fits
+end windowDidEndLiveResize:

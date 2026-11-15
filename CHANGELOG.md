@@ -8,6 +8,7 @@ All notable changes to CO SuperSession are listed here. Versions follow [Semanti
 - Shot folders off with subfolders: Shot folder naming now offers parent_subfolder (KV1/KV1_main), so the parent folder can appear in capture file names
 - Shot subfolders: a short comma-separated list (main, plates) creates unnumbered folders inside every shot folder, each named after its shot (SHOT01/SHOT01_main)
 - Shot folder table: new Subfolders column with a checkbox per row; only checked rows get the shot subfolders
+- Resizable window width: drag either side edge to widen or narrow the window symmetrically (min 640); the file name and preview stretch, the form stays centred, and the width is remembered
 
 ## 0.2.0 – 2026-11-15
 
