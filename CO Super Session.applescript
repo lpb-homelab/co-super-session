@@ -231,7 +231,7 @@ on showWindow:arg
 	if askPhotographer then set winH to winH + 32
 	set cursorTop to 20
 	set w to current application's NSWindow's alloc()'s initWithContentRect:{{0, 0}, {640, winH}} styleMask:3 backing:2 defer:false
-	w's setTitle:("New Super Session " & scriptVersion)
+	w's setTitle:("SuperSession " & scriptVersion)
 	w's setReleasedWhenClosed:false
 	w's setDelegate:me
 	w's setLevel:3 -- floating, stays above Capture One
