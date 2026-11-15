@@ -1754,24 +1754,31 @@ end summaryText
 
 -- "Job_SHOT01", "Job_SHOT15" -> "15": just the trailing number when both names share the same
 -- text before it; otherwise the full last name
+-- also with a pasted name after the number: "Job_SHOT01_beach" … "Job_SHOT05_pool" -> "SHOT05_pool"
 on shortLast(firstName, lastName)
-	set {p1, d1} to my splitTrailingDigits(firstName)
-	set {p2, d2} to my splitTrailingDigits(lastName)
-	if d2 is not "" and p1 is p2 then return d2
-	return lastName
-end shortLast
-
--- "Job_SHOT015" -> {"Job_SHOT", "015"}
-on splitTrailingDigits(s)
-	set k to length of s
+	set n1 to length of firstName
+	set n2 to length of lastName
+	-- length of the common prefix
+	set k to 0
+	repeat while k < n1 and k < n2
+		if (character (k + 1) of firstName) is not (character (k + 1) of lastName) then exit repeat
+		set k to k + 1
+	end repeat
+	-- never cut inside a number: back off to the start of its digits
 	repeat while k > 0
-		if "0123456789" does not contain (character k of s) then exit repeat
+		if "0123456789" does not contain (character k of lastName) then exit repeat
 		set k to k - 1
 	end repeat
-	if k = (length of s) then return {s, ""}
-	if k = 0 then return {"", s}
-	return {text 1 thru k of s, text (k + 1) thru -1 of s}
-end splitTrailingDigits
+	if k = 0 or k ≥ n2 then return lastName
+	if "0123456789" does not contain (character (k + 1) of lastName) then return lastName
+	-- keep the prefix in front of the number ("SHOT05_pool", not "05_pool")
+	repeat while k > 0
+		if "_- ." contains (character k of lastName) then exit repeat
+		set k to k - 1
+	end repeat
+	if k = 0 then return lastName
+	return text (k + 1) thru -1 of lastName
+end shortLast
 
 on parentOf(relPath)
 	-- everything before the last /: "Studio/DAY1/SHOT01" -> "Studio/DAY1"
