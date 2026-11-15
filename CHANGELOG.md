@@ -2,7 +2,7 @@
 
 All notable changes to CO SuperSession are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## 0.2.1 – 2026-11-15
 
 - Renamed to CO SuperSession (script file, window title and release zip). When updating, move the old CO Super Session.scpt to the Bin
 - Shot folders off with subfolders: Shot folder naming now offers parent_subfolder (KV1/KV1_main), so the parent folder can appear in capture file names
