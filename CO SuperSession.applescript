@@ -60,6 +60,9 @@ property cbPrelight : missing value
 property fPrelight : missing value
 property rPrelightField : ""
 property rShotsOn : 1
+property fShotSubs : missing value -- unnumbered folders inside every shot folder: "main, plates"
+property rShotSubsField : ""
+property rShotSubs : {} -- the cleaned names; {} when off
 property fFolders : {} -- session folder name fields, 00-04
 property docsName : ""
 property folderKeys : {"name_raw", "name_selects", "name_output", "name_trash", "name_docs"}
@@ -92,6 +95,10 @@ property rowParents : {} -- shots table: one row per parent ("" = no parents)
 property rowNames : {}
 property rowCounts : {}
 property rowLists : {} -- pasted folder names per table row ({} = none)
+property rowSubs : {} -- Subfolders checkbox per table row: true = its shots get the shot subfolders
+property rGroupSubs : {} -- the Subfolders checkbox of each shot group, parallel to rGroups
+property rShotBase : {} -- the shot folders before their subfolders were added
+property rShotSubFlags : {} -- per shot folder in rShotBase: true = it has the shot subfolders
 property rGroupLists : {} -- the pasted names of each shot group, parallel to rGroups
 property rAppend : true -- true: SHOT01_name; false: the pasted names replace prefix + number
 property rbAppend : missing value -- pasted names: Append (SHOT01_name) or Replace (name)
@@ -103,6 +110,7 @@ property defPrefix : "SHOT_"
 property defCount : "10"
 property wantNumbering : 1 -- what the user picked; used whenever it's available
 property wantMode : 1
+property wantLeaf : 8 -- shot folders off, with subfolders: 7 subfolder, 8 parent_subfolder
 property wantNaming : 1
 property modeIds : {1} -- ids behind the current popup items
 property numberingOrder : {2, 1, 3} -- shot numbering ids in menu order
@@ -142,11 +150,13 @@ on main()
 	set wantNumbering to my clampInt(my prefInt("numbering", 2), 1, 3)
 	my setSeparators(my clampInt(my prefInt("separators", 1), 1, 4))
 	set wantMode to my prefInt("mode", 1)
+	set wantLeaf to my prefInt("leafmode", 8)
 	set wantNaming to my prefInt("filenaming", 3) -- fresh start: job_folder_counter
 	set rowParents to {}
 	set rowNames to {}
 	set rowCounts to {}
 	set rowLists to {}
+	set rowSubs to {}
 	set modalCode to 0
 
 	-- Capture One runs scripts in a background osascript process; Cocoa UI must run on the main thread
@@ -190,6 +200,7 @@ on main()
 	my writePref("counterdigits", rCounter as text)
 	my writePref("separators", sepStyle as text)
 	my writePref("shotfolders", rShotsOn as text)
+	my writePref("shotsubs", rShotSubsField)
 	if rAppend then
 		my writePref("appendlist", "1")
 	else
@@ -215,6 +226,7 @@ on main()
 		if (count of rGroups) > 1 then my writePref("numbering", rNumbering as text)
 	else
 		my writePref("subnumber", "0")
+		if rMode ≥ 7 then my writePref("leafmode", rMode as text)
 	end if
 
 	set the clipboard to rSession
@@ -228,7 +240,7 @@ on showWindow:arg
 	nsApp's setActivationPolicy:1
 	my installEditMenu(nsApp)
 	my loadParentList()
-	set winH to 818 + ((my visibleParentRows()) - 1) * 30
+	set winH to 852 + ((my visibleParentRows()) - 1) * 30
 	if askPhotographer then set winH to winH + 32
 	set cursorTop to 20
 	set w to current application's NSWindow's alloc()'s initWithContentRect:{{0, 0}, {640, winH}} styleMask:3 backing:2 defer:false
@@ -400,6 +412,19 @@ on showWindow:arg
 		(col's setEditable:ced)
 		(tbl's addTableColumn:col)
 	end repeat
+	-- Subfolders: a checkbox per row; only checked rows get the shot subfolders
+	set col to current application's NSTableColumn's alloc()'s initWithIdentifier:"subs"
+	col's headerCell()'s setStringValue:"Subfolders"
+	col's setWidth:75
+	col's setEditable:true
+	set chk to current application's NSButtonCell's alloc()'s init()
+	chk's setButtonType:3 -- checkbox
+	chk's setTitle:""
+	chk's setImagePosition:1 -- image only, centred
+	chk's setControlSize:1
+	col's setDataCell:chk
+	col's setHeaderToolTip:"Checked rows get the Shot subfolders inside each of their shot folders"
+	tbl's addTableColumn:col
 	tbl's setAllowsColumnReordering:false
 	tbl's setAllowsMultipleSelection:true -- ⌘A or ⌘/⇧-click: paste one list into several rows
 	tbl's setColumnAutoresizingStyle:0 -- sizeColumns fits them to their content
@@ -415,6 +440,12 @@ on showWindow:arg
 	set hint to my addLabelAt(v, "Click a cell to edit, or select one or more rows to add a pasted list.", 165, y - 3, 455)
 	hint's setFont:(current application's NSFont's systemFontOfSize:10)
 	hint's setTextColor:(current application's NSColor's secondaryLabelColor())
+
+	set y to my nextRow(26)
+	my addLabel(v, "Shot subfolders:", y)
+	set fShotSubs to my addField(v, my readPref("shotsubs", ""), 165, y, 455)
+	fShotSubs's setPlaceholderString:"inside every shot folder, e.g. main, plates (empty = none)"
+	fShotSubs's setToolTip:"Unnumbered folders inside every shot folder, separated by commas." & linefeed & "Each is named after its shot (SHOT01_main), so the shot stays in the file name."
 
 	set y to my nextRow(26)
 	my addLabel(v, "Shot folder count:", y)
@@ -564,6 +595,7 @@ on refresh()
 	set n to count of parentNames
 	set rGroups to {}
 	set rGroupLists to {}
+	set rGroupSubs to {}
 	set rAppend to ((rbAppend's state()) as integer is 1)
 	set shotsOn to ((cbShots's state()) as integer is 1)
 	if shotsOn then
@@ -580,6 +612,20 @@ on refresh()
 	end repeat
 	rbAppend's setEnabled:(shotsOn and anyList)
 	rbReplace's setEnabled:(shotsOn and anyList)
+	fShotSubs's setEnabled:shotsOn
+	set rShotSubsField to my trim((fShotSubs's stringValue()) as text)
+	set rShotSubs to {}
+	if shotsOn and rShotSubsField is not "" then
+		try
+			considering case
+				repeat with x in my splitParents(rShotSubsField)
+					if {contents of x} is not in rShotSubs then set end of rShotSubs to contents of x
+				end repeat
+			end considering
+		on error
+			my addProblem("Please don't use / or : in shot subfolder names.")
+		end try
+	end if
 	if not shotsOn then
 		-- no numbered shot folders
 	else if n is 0 then
@@ -594,6 +640,7 @@ on refresh()
 			if nm contains "/" or nm contains ":" then my addProblem("Please don't use / or : in the shot prefix.")
 			set rGroups to {{"", nm, c}}
 			set rGroupLists to {L}
+			set rGroupSubs to {my rowHasSubs(1)}
 		end if
 	else
 		-- one table row per direct parent (with subfolders: per subfolder, shared by every parent)
@@ -611,6 +658,7 @@ on refresh()
 				if nm contains "/" or nm contains ":" then my addProblem(my lastComponent(p) & ": please don't use / or : in the shot prefix.")
 				set end of rGroups to {p, nm, c}
 				set end of rGroupLists to L
+				set end of rGroupSubs to my rowHasSubs(r)
 			end if
 		end repeat
 	end if
@@ -633,6 +681,10 @@ on refresh()
 	pNumbering's setEnabled:(ng > 1)
 
 	-- shot folder naming; mode ids: 1 shot, 2 job_shot, 3 parent_shot, 4 job_parent_shot, 5 date_job_parent_shot, 6 date_job_shot
+	-- with shot folders off and subfolders on, it names the subfolders captured into instead:
+	-- 7 subfolder (KV1/main), 8 parent_subfolder (KV1/KV1_main), so the parent can be in the file name
+	set leafNaming to false
+	if not shotsOn and n > 0 then set leafNaming to ((item 1 of parentNames) contains "/")
 	if ng > 0 then
 		set {p1, n1, s1, c1} to item 1 of my numberGroups(my numberInput(rGroups), rNumbering)
 		set L1 to item 1 of rGroupLists
@@ -655,14 +707,22 @@ on refresh()
 			set end of ids to 6
 			set end of labels to "date_job_shot  (" & rDate & partSep & rJob & partSep & firstShot & ")"
 		end if
+	else if leafNaming then
+		set p1 to item 1 of parentNames
+		set ids to {7, 8}
+		set labels to {"subfolder  (" & my lastComponent(p1) & ")", "parent_subfolder  (" & my pName(p1) & ")"}
 	else
 		set ids to {1}
 		set labels to {"(no numbered shot folders)"}
 	end if
 	set modeIds to ids
-	set rMode to my pickId(wantMode, ids)
+	if leafNaming then
+		set rMode to my pickId(wantLeaf, ids)
+	else
+		set rMode to my pickId(wantMode, ids)
+	end if
 	my fillPopup(pMode, labels, my posOf(rMode, ids))
-	pMode's setEnabled:(ng > 0)
+	pMode's setEnabled:(ng > 0 or leafNaming)
 	pDigits's setEnabled:(ng > 0)
 
 	if ng > 0 then
@@ -683,9 +743,44 @@ on refresh()
 		repeat with x in dupes
 			my addProblem("Two shot folders would both be named “" & x & "”. Check the pasted list.")
 		end repeat
+		-- shot subfolders: SHOT01/SHOT01_main, SHOT01/SHOT01_plates. Capture One only puts the
+		-- folder captured into in the file name, so each subfolder carries its shot folder's name
+		-- Only the rows with Subfolders checked get them; each group made as many folders as its count
+		set rShotBase to rShotNames
+		set rShotSubFlags to {}
+		repeat with gi from 1 to ng
+			repeat (item 3 of item gi of rGroups) times
+				set end of rShotSubFlags to (rShotSubs is not {} and item gi of rGroupSubs)
+			end repeat
+		end repeat
+		if rShotSubFlags contains true and (count of rShotSubFlags) is (count of rShotNames) then
+			set subPaths to {}
+			repeat with i from 1 to count of rShotNames
+				set x to item i of rShotNames
+				if item i of rShotSubFlags then
+					repeat with sName in rShotSubs
+						set end of subPaths to x & "/" & my lastComponent(x) & partSep & (contents of sName)
+					end repeat
+				else
+					set end of subPaths to x
+				end if
+			end repeat
+			set rShotNames to subPaths
+		else
+			set rShotSubFlags to {}
+		end if
 	else
+		set rShotBase to {}
+		set rShotSubFlags to {}
 		-- shot folders off: capture into the parent folders, or straight into RAW
 		set rShotNames to parentNames
+		if leafNaming and rMode is 8 then
+			-- KV1/main -> KV1/KV1_main
+			set rShotNames to {}
+			repeat with p in parentNames
+				set end of rShotNames to (contents of p) & "/" & my pName(contents of p)
+			end repeat
+		end if
 	end if
 
 	-- capture file naming, previewed with the first numbered folder; hides options that would
@@ -1038,7 +1133,9 @@ on syncRows()
 	set newNames to {}
 	set newCounts to {}
 	set newLists to {}
+	set newSubs to {}
 	repeat with i from 1 to count of names
+		set end of newSubs to my rowHasSubs(i) -- new rows start checked
 		-- a pasted list belongs to its row only; new rows start without one
 		if i ≤ (count of rowLists) then
 			set end of newLists to item i of rowLists
@@ -1068,8 +1165,15 @@ on syncRows()
 	set rowNames to newNames
 	set rowCounts to newCounts
 	set rowLists to newLists
+	set rowSubs to newSubs
 	tbl's reloadData()
 end syncRows
+
+-- the Subfolders checkbox of table row i (1-based); checked unless it was turned off
+on rowHasSubs(i)
+	if i > (count of rowSubs) then return true
+	return item i of rowSubs
+end rowHasSubs
 
 ---------- WINDOW EVENTS ----------
 on controlTextDidChange:aNotification
@@ -1113,7 +1217,13 @@ end controlTextDidChange:
 on popupChanged:sender
 	set i to ((sender's indexOfSelectedItem()) as integer) + 1
 	if (sender's isEqual:pNumbering) as boolean then set wantNumbering to item i of numberingOrder
-	if (sender's isEqual:pMode) as boolean then set wantMode to item i of modeIds
+	if (sender's isEqual:pMode) as boolean then
+		if item i of modeIds ≥ 7 then
+			set wantLeaf to item i of modeIds
+		else
+			set wantMode to item i of modeIds
+		end if
+	end if
 	if (sender's isEqual:pNaming) as boolean then set wantNaming to item i of namingIds
 	my refresh()
 end popupChanged:
@@ -1147,6 +1257,7 @@ on tableClicked:sender
 	set flags to (current application's NSApplication's sharedApplication()'s currentEvent()'s modifierFlags()) as integer
 	if (flags div 1048576) mod 2 is 1 or (flags div 131072) mod 2 is 1 then return
 	set col to item (c + 1) of (tbl's tableColumns() as list)
+	if (col's identifier()) as text is "subs" then return -- the checkbox handles its own click
 	if (col's identifier()) as text is "list" then
 		-- a click inside a multiple selection pastes into all of it
 		set rows to my selectedRows()
@@ -1163,7 +1274,7 @@ on sizeColumns()
 	set avail to ((tbl's enclosingScrollView()'s contentSize())'s width) as real
 	set gap to ((tbl's intercellSpacing())'s width) as real
 	set wants to {}
-	repeat with col in cols
+	repeat with col in items 1 thru 4 of cols
 		set f to (col's dataCell()'s |font|())
 		set attrs to (current application's NSDictionary's dictionaryWithObject:f forKey:(current application's NSFontAttributeName))
 		set w to ((((current application's NSString's stringWithString:((col's headerCell()'s stringValue()) as text))'s sizeWithAttributes:attrs)'s width) as real) + 12
@@ -1177,13 +1288,14 @@ on sizeColumns()
 	set {wP, wN, wC, wL} to wants
 	set wC to my clampInt(wC, 50, 90)
 	set wL to my clampInt(wL, 60, 100)
-	set spare to avail - wC - wL - 4 * gap
+	set wS to 75 -- Subfolders: fixed, fits its header
+	set spare to avail - wC - wL - wS - 5 * gap
 	-- the parent gets what it needs, but leaves the prefix at least 120
 	if wP > spare - 120 then set wP to spare - 120
 	if wP < 70 then set wP to 70
 	set wN to spare - wP
-	repeat with k from 1 to 4
-		((item k of cols)'s setWidth:(item k of {wP, wN, wC, wL}))
+	repeat with k from 1 to 5
+		((item k of cols)'s setWidth:(item k of {wP, wN, wC, wL, wS}))
 	end repeat
 end sizeColumns
 
@@ -1202,6 +1314,7 @@ on tableView:tv shouldEditTableColumn:col row:r
 end tableView:shouldEditTableColumn:row:
 
 on tableView:tv willDisplayCell:cell forTableColumn:col row:r
+	if (col's identifier()) as text is "subs" then return -- a checkbox, no text colour
 	if my canEdit(col, (r as integer) + 1) then
 		cell's setTextColor:(current application's NSColor's labelColor())
 	else
@@ -1229,6 +1342,9 @@ on tableView:tv objectValueForTableColumn:col row:r
 		return my lastComponent(p) -- direct parent only; the full path is in the preview
 	else if cid is "name" then
 		return item i of rowNames
+	else if cid is "subs" then
+		if my rowHasSubs(i) then return 1
+		return 0
 	end if
 	set L to {}
 	if i ≤ (count of rowLists) then set L to my cleanList(item i of rowLists)
@@ -1244,9 +1360,17 @@ end tableView:objectValueForTableColumn:row:
 on tableView:tv setObjectValue:val forTableColumn:col row:r
 	set i to (r as integer) + 1
 	if i > (count of rowNames) then return
+	set cid to (col's identifier()) as text
+	if cid is "subs" then
+		repeat while (count of rowSubs) < i
+			set end of rowSubs to true
+		end repeat
+		set item i of rowSubs to ((val's integerValue()) as integer is 1)
+		my refresh()
+		return
+	end if
 	set t to ""
 	if val is not missing value then set t to val as text
-	set cid to (col's identifier()) as text
 	if cid is "name" then set item i of rowNames to t
 	if cid is "count" then set item i of rowCounts to t
 	my refresh()
@@ -1394,7 +1518,7 @@ on releaseWindow()
 	set {btnPaste, pastePanel, pasteView} to {missing value, missing value, missing value}
 	set {fClient, cbSub, fAllCounts, fFileName} to {missing value, missing value, missing value, missing value}
 	set {fLocation, fJob, fDateFmt, fDate, fPhotog, parentScroll, parentDoc} to {missing value, missing value, missing value, missing value, missing value, missing value, missing value}
-	set {rbSep, fFolders, cbShots, cbPrelight, fPrelight} to {{}, {}, missing value, missing value, missing value}
+	set {rbSep, fFolders, cbShots, cbPrelight, fPrelight, fShotSubs} to {{}, {}, missing value, missing value, missing value, missing value}
 	set {pNumbering, pMode, pDigits, pNaming, pCounter, previewView, createBtn} to {missing value, missing value, missing value, missing value, missing value, missing value, missing value}
 end releaseWindow
 
@@ -1719,6 +1843,20 @@ on summaryText(sessionName, parentPath, shotNames, namingIndex, jobName, counter
 	set t to "Create session “" & sessionName & "”" & return & "in " & parentPath & return & return
 	set t to t & rawName & "/" & return
 	if prelightName is not "" then set t to t & "   " & prelightName & "/" & return
+	-- shot subfolders: the tree lists the shot folders, with their subfolders named on the same line
+	set subTail to ""
+	-- (only the shot folders of table rows with Subfolders checked have them)
+	set subFlags to {}
+	if rShotsOn is 1 and rShotSubFlags contains true and shotNames is rShotNames then
+		set shotNames to rShotBase
+		set subFlags to rShotSubFlags
+		repeat with x in rShotSubs
+			if subTail is not "" then set subTail to subTail & ", "
+			set subTail to subTail & "…" & partSep & (contents of x)
+		end repeat
+		set subTail to "with  " & subTail
+	end if
+	set allSubTail to subTail
 	-- folder tree inside RAW: each parent / subfolder on its own indented line, then the
 	-- shot folders under it as first … last (count); with shot folders off, every folder
 	set printed to {} -- parent path components already printed, by level
@@ -1750,14 +1888,21 @@ on summaryText(sessionName, parentPath, shotNames, namingIndex, jobName, counter
 		end repeat
 		set printed to comps
 		set ind to my indent((count of comps) + 1)
+		-- shots under one parent come from one table row, so they share its Subfolders checkbox
+		set subTail to ""
+		if subFlags is not {} then
+			if item i of subFlags then set subTail to allSubTail
+		end if
 		if rShotsOn is 0 then
 			repeat with k from i to j
 				set t to t & ind & my lastComponent(item k of shotNames) & "/" & return
 			end repeat
 		else if j > i then
 			set t to t & ind & my lastComponent(item i of shotNames) & " … " & my shortLast(my lastComponent(item i of shotNames), my lastComponent(item j of shotNames)) & "   (" & (j - i + 1) & ")" & return
+			if subTail is not "" then set t to (text 1 thru -2 of t) & "   each " & subTail & return
 		else
 			set t to t & ind & my lastComponent(item i of shotNames) & return
+			if subTail is not "" then set t to (text 1 thru -2 of t) & "/   " & subTail & return
 		end if
 		set i to j + 1
 	end repeat
@@ -1989,7 +2134,12 @@ on sameNameWarning()
 	set AppleScript's text item delimiters to ", "
 	set d to dupes as text
 	set AppleScript's text item delimiters to ""
-	return "Note: more than one capture folder is named " & d & "." & return & "File names won't show which parent folder they came from," & return & "and if the counter is reset when switching folders, names will repeat." & return & "To fix: turn on Shot folders and pick a naming with parent in it."
+	if rShotsOn is 0 then
+		set fix to "To fix: set Shot folder naming to parent_subfolder."
+	else
+		set fix to "To fix: pick a Shot folder naming with parent in it."
+	end if
+	return "Note: more than one capture folder is named " & d & "." & return & "File names won't show which parent folder they came from," & return & "and if the counter is reset when switching folders, names will repeat." & return & fix
 end sameNameWarning
 
 -- Grows or shrinks the window so the whole summary fits without scrolling (up to the

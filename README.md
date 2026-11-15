@@ -98,9 +98,11 @@ The window works from top to bottom, and the preview updates as you type. Hover 
 7. **Pasted lists.** Select one or more rows (⌘A selects all), then click **Paste list…** or the row's **List** cell. Paste one name per line and press ⌘Return. The number of names sets the number of shots for that row. **Remove list** goes back to plain numbering. Choose how the names are used:
    - **Append** keeps the number and adds the name: `SHOT01_NL4102`
    - **Replace** uses the name as the folder: `NL4102`
-8. **Shot folder count.** Choose whether numbering restarts in each parent folder, continues per shot prefix, or continues across all parent folders.
-9. **Shot folder naming and capture file naming.** Choose what each shot folder and capture file is called, and how many digits the numbers have.
-10. **Check the preview.** The folder tree, a sample file name and any problems, such as a folder that already exists, appear before anything is created. Click **Create Session** to build it.
+8. **Shot subfolders.** Optional. Type a short list such as `main, plates` or `full, medium, close` to get those folders inside every shot folder. They are not numbered, and each is named after its shot (`SHOT01/SHOT01_main`), so the shot stays in the capture file name. Only table rows with **Subfolders** checked get them; untick a row to keep its shot folders plain.
+9. **Shot folder count.** Choose whether numbering restarts in each parent folder, continues per shot prefix, or continues across all parent folders.
+10. **Shot folder naming and capture file naming.** Choose what each shot folder and capture file is called, and how many digits the numbers have.
+   With **Shot folders** off and **Subfolders** on, you capture straight into the subfolders. Shot folder naming then picks their names: **subfolder** gives `KV1/main`, **parent_subfolder** gives `KV1/KV1_main`. Capture One can only put the folder you capture into in the file name, so use parent_subfolder to get `KV1` into the file name too.
+11. **Check the preview.** The folder tree, a sample file name and any problems, such as a folder that already exists, appear before anything is created. Click **Create Session** to build it.
 
 ## Updating
 

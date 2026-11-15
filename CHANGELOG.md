@@ -5,6 +5,9 @@ All notable changes to CO SuperSession are listed here. Versions follow [Semanti
 ## Unreleased
 
 - Renamed to CO SuperSession (script file, window title and release zip). When updating, move the old CO Super Session.scpt to the Bin
+- Shot folders off with subfolders: Shot folder naming now offers parent_subfolder (KV1/KV1_main), so the parent folder can appear in capture file names
+- Shot subfolders: a short comma-separated list (main, plates) creates unnumbered folders inside every shot folder, each named after its shot (SHOT01/SHOT01_main)
+- Shot folder table: new Subfolders column with a checkbox per row; only checked rows get the shot subfolders
 
 ## 0.2.0 – 2026-11-15
 
