@@ -378,7 +378,7 @@ on showWindow:arg
 	hint's setTextColor:(current application's NSColor's secondaryLabelColor())
 
 	set y to my nextRow(26)
-	my addLabel(v, "Shot numbering:", y)
+	my addLabel(v, "Shot folder count:", y)
 	set pNumbering to my addPopup(v, 165, y, 455)
 
 	set y to my nextRow(26)
