@@ -9,6 +9,7 @@ Starting a shoot in Capture One usually means creating the session, renaming its
 - Names the session from the date, client and job, for example `2026-11-14_ACME_Spring-Campaign`
 - Creates your own folder layout (RAW, selects, output, trash, documents) and points Capture One at it
 - Builds capture folders for the shoot: a prelight folder, groups such as days or locations, and numbered shot folders
+- Takes a pasted list of names, such as SKUs, looks or talent, one per line, so each shot folder carries its own name. It warns you if two folders would end up with the same name
 - Sets the capture file naming so every image carries the job and shot it belongs to
 - Adds the photographer's copyright to every capture
 - Shows the resulting folder tree and a sample file name before anything is created, and flags problems such as a folder that already exists
@@ -88,6 +89,23 @@ Writing copyright directly needs Capture One Studio. Without Studio, the script 
 2. In Capture One, choose **Scripts › Open Scripts Folder** and drag **CO Super Session.scpt** into the folder that opens.
 3. Choose **Scripts › Update Scripts Menu**, then **Scripts › CO Super Session**.
 
+## Using it
+
+The window works from top to bottom, and the preview updates as you type. Hover over a field for a hint.
+
+1. **Client, job and photographer.** These make up the session name and the copyright. **Location** is where the session folder is created. Use **Choose…** to change it.
+2. **Session folders.** Name the RAW, selects, output, trash and documents folders.
+3. **Date format and separators.** Set how the date is written (for example `YYYY-MM-DD` or `YYMMDD`) and which characters join the parts of each name.
+4. **Prelight folder.** If you turn it on, a folder is created inside RAW and used as the first capture folder.
+5. **Parent folders.** Add groups such as days, locations or collections. Turn on **Subfolders** to add a second level inside each one, for example `Studio/DAY1`.
+6. **Shot folders.** Each row in the table is one group of shots. Click a cell to change its shot prefix or its number of shots. Type a number in **#** to use it for every row.
+7. **Pasted lists.** Select one or more rows (⌘A selects all), then click **Paste list…** or the row's **List** cell. Paste one name per line and press ⌘Return. The number of names sets the number of shots for that row. **Remove list** goes back to plain numbering. Choose how the names are used:
+   - **Append** keeps the number and adds the name: `SHOT01_NL4102`
+   - **Replace** uses the name as the folder: `NL4102`
+8. **Shot folder count.** Choose whether numbering restarts in each parent folder, continues per shot prefix, or continues across all parent folders.
+9. **Shot folder naming and capture file naming.** Choose what each shot folder and capture file is called, and how many digits the numbers have.
+10. **Check the preview.** The folder tree, a sample file name and any problems, such as a folder that already exists, appear before anything is created. Click **Create Session** to build it.
+
 ## Updating
 
 1. Download the newer **CO-Super-Session** zip from the [Releases page](../../releases) and unzip it.
@@ -99,6 +117,10 @@ Writing copyright directly needs Capture One Studio. Without Studio, the script 
 Your saved choices are kept, because they are stored separately from the script file.
 
 If you installed from the source, get the latest source and run `./install.sh` from its folder in Terminal. It replaces the installed copy for you.
+
+## What's new
+
+See the [changelog](CHANGELOG.md) for what changed in each version, including changes not yet released.
 
 ## Customising
 
