@@ -11,7 +11,7 @@ TAG="v$VERSION"
 ZIP="build/CO-SuperSession-$VERSION.zip"
 
 [ -n "$VERSION" ] || { echo "No scriptVersion found in $SRC"; exit 1; }
-git diff --quiet HEAD || { echo "Commit your changes first."; exit 1; }
+[ -z "$(git status --porcelain)" ] || { echo "Commit your changes first (untracked files too)."; exit 1; }
 grep -q "^## $VERSION " CHANGELOG.md || { echo "Add a '## $VERSION' section to CHANGELOG.md first."; exit 1; }
 
 PKG="build/package"

@@ -9,6 +9,13 @@ All notable changes to CO SuperSession are listed here. Versions follow [Semanti
 - Shot subfolders: a short comma-separated list (main, plates) creates unnumbered folders inside every shot folder, each named after its shot (SHOT01/SHOT01_main)
 - Shot folder table: new Subfolders column with a checkbox per row; only checked rows get the shot subfolders
 - Resizable window width: drag either side edge to widen or narrow the window symmetrically (min 640); the file name and preview stretch, the form stays centred, and the width is remembered
+- Fixed: parent_subfolder created KV1/main/KV1_main instead of KV1/KV1_main
+- Fixed: accented characters in remembered settings (Zoë, Café) came back garbled on the next run
+- Fixed: folder names differing only in capitals (RAW and raw, Studio and studio) are now reported as duplicates, and a session folder named output, selects or trash is no longer removed as a Capture One default
+- Fixed: with more than five parent or subfolder rows, the list opened scrolled to the bottom
+- Fixed: removing a parent folder no longer hands its shot prefix, count and pasted list to the next parent
+- Fixed: the chosen file naming, shot folder naming, numbering and shot count are remembered even when a session couldn't use them
+- Errors while building or updating the window are now shown instead of failing silently
 
 ## 0.2.0 – 2026-11-15
 

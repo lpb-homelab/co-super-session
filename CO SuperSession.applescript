@@ -120,6 +120,7 @@ property modeIds : {1} -- ids behind the current popup items
 property numberingOrder : {2, 1, 3} -- shot numbering ids in menu order
 property namingIds : {1}
 property modalCode : 0
+property uiError : "" -- an error while building the window; Cocoa would swallow it, main reports it
 
 -- results of the last refresh, used by Create Session
 property problem : ""
@@ -162,6 +163,7 @@ on main()
 	set rowLists to {}
 	set rowSubs to {}
 	set modalCode to 0
+	set uiError to ""
 
 	-- Capture One runs scripts in a background osascript process; Cocoa UI must run on the main thread
 	if (current application's NSThread's isMainThread()) as boolean then
@@ -170,6 +172,7 @@ on main()
 		my performSelectorOnMainThread:"showWindow:" withObject:(missing value) waitUntilDone:true
 	end if
 	my releaseWindow()
+	if uiError is not "" then error uiError
 	if modalCode is not 1 then return
 
 	if prelightName is not "" then
@@ -200,7 +203,11 @@ on main()
 	else
 		my writePref("subfolders", "0")
 	end if
-	my writePref("filenaming", rNaming as text)
+	-- the choices the user picked, not the stand-ins shown when one isn't available this time
+	my writePref("filenaming", wantNaming as text)
+	my writePref("mode", wantMode as text)
+	my writePref("leafmode", wantLeaf as text)
+	my writePref("numbering", wantNumbering as text)
 	my writePref("counterdigits", rCounter as text)
 	my writePref("separators", sepStyle as text)
 	my writePref("shotfolders", rShotsOn as text)
@@ -226,11 +233,6 @@ on main()
 		my writePref("prefix", lastPrefix)
 		my writePref("subnumber", lastCount as text)
 		my writePref("digits", rDigits as text)
-		my writePref("mode", rMode as text)
-		if (count of rGroups) > 1 then my writePref("numbering", rNumbering as text)
-	else
-		my writePref("subnumber", "0")
-		if rMode ≥ 7 then my writePref("leafmode", rMode as text)
 	end if
 
 	set the clipboard to rSession
@@ -238,7 +240,19 @@ on main()
 end main
 
 ---------- WINDOW ----------
+-- Errors in a handler called by Cocoa vanish silently, so catch them here for main to report
 on showWindow:arg
+	try
+		my buildWindow()
+	on error errMsg
+		set uiError to errMsg
+		try
+			if win is not missing value then win's orderOut:me
+		end try
+	end try
+end showWindow:
+
+on buildWindow()
 	set nsApp to current application's NSApplication's sharedApplication()
 	-- accessory: the background osascript process may own windows and come to the front
 	nsApp's setActivationPolicy:1
@@ -529,10 +543,24 @@ on showWindow:arg
 	w's makeFirstResponder:fClient
 	nsApp's runModalForWindow:w
 	w's orderOut:me
-end showWindow:
+end buildWindow
 
 -- Every edit lands here; recomputes names, checks for problems, updates popups and preview.
+-- An error in it is shown in the preview (and blocks Create Session) instead of vanishing.
 on refresh()
+	try
+		my refreshBody()
+	on error errMsg
+		set problem to "Something went wrong while updating the preview:" & return & errMsg
+		try
+			previewView's setString:problem
+			previewView's setTextColor:(current application's NSColor's systemRedColor())
+			createBtn's setEnabled:false
+		end try
+	end try
+end refresh
+
+on refreshBody()
 	set problem to ""
 	-- session name part: client and job, joined like any other part; either may be empty
 	set rClientRaw to my trim((fClient's stringValue()) as text)
@@ -594,9 +622,8 @@ on refresh()
 		set nm to item i of fnames
 		if nm is "" and i < 5 then my addProblem("The " & item i of folderRoles & " folder needs a name.")
 		if nm contains "/" or nm contains ":" then my addProblem("Please don't use / or : in folder names.")
-		considering case
-			if nm is not "" and {nm} is in seen then my addProblem("Two session folders are both named “" & nm & "”.")
-		end considering
+		-- compared ignoring case, like the disk: RAW and raw are one folder
+		if nm is not "" and {nm} is in seen then my addProblem("Two session folders are both named “" & nm & "”.")
 		set end of seen to nm
 	end repeat
 
@@ -611,6 +638,15 @@ on refresh()
 	on error msg
 		my addProblem(msg)
 	end try
+	-- the same parent twice (ignoring case, like the disk) would merge into one folder
+	set seenP to {}
+	repeat with p in parentNames
+		if {contents of p} is in seenP then
+			my addProblem("Two parent folders are both named “" & (contents of p) & "”.")
+			exit repeat
+		end if
+		set end of seenP to contents of p
+	end repeat
 	set n to count of parentNames
 	set rGroups to {}
 	set rGroupLists to {}
@@ -636,11 +672,9 @@ on refresh()
 	set rShotSubs to {}
 	if shotsOn and rShotSubsField is not "" then
 		try
-			considering case
-				repeat with x in my splitParents(rShotSubsField)
-					if {contents of x} is not in rShotSubs then set end of rShotSubs to contents of x
-				end repeat
-			end considering
+			repeat with x in my splitParents(rShotSubsField)
+				if {contents of x} is not in rShotSubs then set end of rShotSubs to contents of x
+			end repeat
 		on error
 			my addProblem("Please don't use / or : in shot subfolder names.")
 		end try
@@ -749,16 +783,14 @@ on refresh()
 		-- pasted names can repeat; two folders with the same path would merge
 		set seen to {}
 		set dupes to {}
-		considering case
-			repeat with x in rShotNames
-				set x to contents of x
-				if {x} is in seen then
-					if {x} is not in dupes then set end of dupes to x
-				else
-					set end of seen to x
-				end if
-			end repeat
-		end considering
+		repeat with x in rShotNames
+			set x to contents of x
+			if {x} is in seen then
+				if {x} is not in dupes then set end of dupes to x
+			else
+				set end of seen to x
+			end if
+		end repeat
 		repeat with x in dupes
 			my addProblem("Two shot folders would both be named “" & x & "”. Check the pasted list.")
 		end repeat
@@ -797,7 +829,7 @@ on refresh()
 			-- KV1/main -> KV1/KV1_main
 			set rShotNames to {}
 			repeat with p in parentNames
-				set end of rShotNames to (contents of p) & "/" & my pName(contents of p)
+				set end of rShotNames to my parentOf(contents of p) & "/" & my pName(contents of p)
 			end repeat
 		end if
 	end if
@@ -864,7 +896,7 @@ on refresh()
 	if (tbl's editedRow()) as integer < 0 then my sizeColumns() -- not while a cell is being typed in
 	my fitPreview()
 	my updateSepTips()
-end refresh
+end refreshBody
 
 -- Separator tooltips: a fixed example file name (today's date, client, job name, DAY01,
 -- SHOT01, 0001) written with each separator style
@@ -993,6 +1025,12 @@ end visibleParentRows
 -- focusTag > 0 puts the cursor in that field (101… level 1, 201… level 2)
 on rebuildParentRows(focusTag)
 	win's makeFirstResponder:(missing value) -- finish any typing in a field about to be removed
+	-- how far the list is scrolled down from its top, to put it back there afterwards
+	-- (the view isn't flipped, so left alone it would show the bottom rows)
+	set {{bx, |by|}, {bw, bh}} to parentScroll's contentView()'s |bounds|()
+	set {{dx, dy}, {dw, oldDocH}} to parentDoc's frame()
+	set topOff to oldDocH - (|by| + bh)
+	if topOff < 0 then set topOff to 0
 	set areaH to (my visibleParentRows()) * 30
 	set {{sx, sy}, {sw, sh}} to parentScroll's frame()
 	set delta to areaH - sh
@@ -1026,6 +1064,10 @@ on rebuildParentRows(focusTag)
 			my addFolderRow(item i of subList, 235, docH - 27 - i * 30, 200 + i, i, n, isOn, "addSub:", "removeSub:", "e.g. DAY1, Look 1")
 		end repeat
 	end if
+
+	set scrollY to docH - areaH - topOff
+	if scrollY < 0 then set scrollY to 0
+	parentDoc's scrollPoint:{0, scrollY}
 
 	if focusTag > 0 and isOn then
 		set f to parentDoc's viewWithTag:focusTag
@@ -1154,26 +1196,50 @@ on syncRows()
 	set newCounts to {}
 	set newLists to {}
 	set newSubs to {}
+	-- each row keeps the data of the old row with the same parent, so removing a parent
+	-- doesn't hand its prefix and pasted list to the next one. src: old row per new row, 0 = new
+	set oldN to count of rowNames
+	set src to {}
+	set claimed to {}
 	repeat with i from 1 to count of names
-		set end of newSubs to my rowHasSubs(i) -- new rows start checked
-		-- a pasted list belongs to its row only; new rows start without one
-		if i ≤ (count of rowLists) then
-			set end of newLists to item i of rowLists
-		else
-			set end of newLists to {}
+		set r to my posOfText(item i of names, rowParents)
+		if r > oldN or r is in claimed then set r to 0
+		set end of src to r
+		if r > 0 then set end of claimed to r
+	end repeat
+	-- no old row with that name: the parent was renamed (every keystroke does this) or the
+	-- checkbox was switched, so it keeps the row at its position unless another parent owns it
+	repeat with i from 1 to count of names
+		if item i of src is 0 and i ≤ oldN and i is not in claimed then
+			set item i of src to i
+			set end of claimed to i
 		end if
-		if i ≤ (count of rowNames) then
-			set nm to item i of rowNames
-			set c to item i of rowCounts
-		else if i > 1 then
-			set nm to item (i - 1) of newNames
-			set c to item (i - 1) of newCounts
+	end repeat
+	repeat with i from 1 to count of names
+		set r to item i of src
+		-- a pasted list belongs to its row only; new rows start without one, Subfolders checked
+		if r > 0 then
+			set end of newSubs to my rowHasSubs(r)
+			if r ≤ (count of rowLists) then
+				set end of newLists to item r of rowLists
+			else
+				set end of newLists to {}
+			end if
+			set nm to item r of rowNames
+			set c to item r of rowCounts
 		else
-			set nm to defPrefix
-			set c to defCount
+			set end of newSubs to true
+			set end of newLists to {}
+			if i > 1 then
+				set nm to item (i - 1) of newNames
+				set c to item (i - 1) of newCounts
+			else
+				set nm to defPrefix
+				set c to defCount
+			end if
 		end if
 		-- new rows follow the All rows number when one is set
-		if i > (count of rowNames) and fAllCounts is not missing value then
+		if r is 0 and fAllCounts is not missing value then
 			set allT to my trim((fAllCounts's stringValue()) as text)
 			if allT is not "" then set c to allT
 		end if
@@ -1821,9 +1887,8 @@ on buildSession(parentFolder, sessionName, jobName, photographer, shotNames, cap
 	-- (skipping any default name the user chose for one of their own folders)
 	set defaults to {}
 	repeat with d in {"Capture", "Selects", "Output", "Trash"}
-		considering case
-			if {contents of d} is not in ({rawName, selectsName, outputName, trashName} & extraFolders) then set end of defaults to quoted form of (contents of d)
-		end considering
+		-- ignoring case, like the disk: a folder named "output" IS Capture One's "Output"
+		if {contents of d} is not in ({rawName, selectsName, outputName, trashName} & extraFolders) then set end of defaults to quoted form of (contents of d)
 	end repeat
 	if defaults is not {} then
 		set AppleScript's text item delimiters to space
@@ -2101,16 +2166,22 @@ on prefInt(k, fallback)
 	end try
 end prefInt
 
+-- NSUserDefaults rather than the defaults command: `defaults read` escapes accented
+-- characters (Zoë comes back as Zo\353), and this needs no shell
 on readPref(k, fallback)
 	try
-		return do shell script "defaults read " & prefsDomain & space & quoted form of k
+		set v to (current application's NSUserDefaults's alloc()'s initWithSuiteName:prefsDomain)'s stringForKey:k
+		if v is missing value then return fallback
+		return v as text
 	on error
 		return fallback
 	end try
 end readPref
 
 on writePref(k, v)
-	do shell script "defaults write " & prefsDomain & space & quoted form of k & " -string " & quoted form of (v as text)
+	set d to current application's NSUserDefaults's alloc()'s initWithSuiteName:prefsDomain
+	d's setObject:(v as text) forKey:k
+	d's synchronize()
 end writePref
 
 on setPreviewWrap(doWrap)
