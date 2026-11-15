@@ -2,7 +2,7 @@
 
 All notable changes to CO Super Session are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## 0.2.0 – 2026-11-15
 
 - Paste list: paste folder names (one per line) for the selected shot folder rows (⌘A for all), from the Paste list button or the new List column
 - Shot folder table columns size themselves to fit their content
