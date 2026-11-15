@@ -1,6 +1,10 @@
 # Changelog
 
-All notable changes to CO Super Session are listed here. Versions follow [Semantic Versioning](https://semver.org).
+All notable changes to CO SuperSession are listed here. Versions follow [Semantic Versioning](https://semver.org).
+
+## Unreleased
+
+- Renamed to CO SuperSession (script file, window title and release zip). When updating, move the old CO Super Session.scpt to the Bin
 
 ## 0.2.0 – 2026-11-15
 
