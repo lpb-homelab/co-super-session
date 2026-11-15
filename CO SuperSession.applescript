@@ -226,6 +226,7 @@ on showWindow:arg
 	set nsApp to current application's NSApplication's sharedApplication()
 	-- accessory: the background osascript process may own windows and come to the front
 	nsApp's setActivationPolicy:1
+	my installEditMenu(nsApp)
 	my loadParentList()
 	set winH to 818 + ((my visibleParentRows()) - 1) * 30
 	if askPhotographer then set winH to winH + 32
@@ -1398,6 +1399,24 @@ on releaseWindow()
 end releaseWindow
 
 ---------- WINDOW HELPERS ----------
+-- osascript has no menu bar, so ⌘C/⌘V/⌘X/⌘A/⌘Z do nothing in text fields;
+-- an Edit menu (never shown for an accessory app) gives the keys somewhere to go
+on installEditMenu(nsApp)
+	if nsApp's mainMenu() is not missing value then return
+	set menuBar to current application's NSMenu's alloc()'s initWithTitle:""
+	set appItem to current application's NSMenuItem's alloc()'s initWithTitle:"" action:(missing value) keyEquivalent:""
+	appItem's setSubmenu:(current application's NSMenu's alloc()'s initWithTitle:"")
+	menuBar's addItem:appItem
+	set editMenu to current application's NSMenu's alloc()'s initWithTitle:"Edit"
+	repeat with spec in {{"Undo", "undo:", "z"}, {"Redo", "redo:", "Z"}, {"Cut", "cut:", "x"}, {"Copy", "copy:", "c"}, {"Paste", "paste:", "v"}, {"Select All", "selectAll:", "a"}}
+		(editMenu's addItemWithTitle:(item 1 of spec) action:(item 2 of spec) keyEquivalent:(item 3 of spec))
+	end repeat
+	set editItem to current application's NSMenuItem's alloc()'s initWithTitle:"Edit" action:(missing value) keyEquivalent:""
+	editItem's setSubmenu:editMenu
+	menuBar's addItem:editItem
+	nsApp's setMainMenu:menuBar
+end installEditMenu
+
 -- y (from the bottom, as Cocoa wants) for the next row of height h, top to bottom
 on nextRow(h)
 	set y to winH - cursorTop - h
