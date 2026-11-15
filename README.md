@@ -6,7 +6,7 @@ Starting a shoot in Capture One usually means creating the session, renaming its
 
 ## What it does
 
-- Names the session from the date, client and job, for example `2026-11-14_ACME_Spring-Campaign`
+- Names the session from the date, client and job, for example `2026-11-14_LUMARA_Night-Glow`
 - Creates your own folder layout (RAW, selects, output, trash, documents) and points Capture One at it
 - Builds capture folders for the shoot: a prelight folder, groups such as days or locations, and numbered shot folders
 - Takes a pasted list of names, such as SKUs, looks or talent, one per line, so each shot folder carries its own name. It warns you if two folders would end up with the same name
@@ -15,24 +15,20 @@ Starting a shoot in Capture One usually means creating the session, renaming its
 - Shows the resulting folder tree and a sample file name before anything is created, and flags problems such as a folder that already exists
 - Remembers your choices for the next session
 
-A two-day shoot with five shots a day might look like this:
+A two-day shoot for the lamp brand Lumara, with three key visuals (prefix KV) a day, might look like this:
 
 ```
-2026-11-14_ACME_Spring-Campaign/
+2026-11-14_LUMARA_Night-Glow/
 ├── 00_RAW/
 │   ├── _prelight/
 │   ├── DAY1/
-│   │   ├── SHOT01/
-│   │   ├── SHOT02/
-│   │   ├── SHOT03/
-│   │   ├── SHOT04/
-│   │   └── SHOT05/
+│   │   ├── KV01/
+│   │   ├── KV02/
+│   │   └── KV03/
 │   └── DAY2/
-│       ├── SHOT06/
-│       ├── SHOT07/
-│       ├── SHOT08/
-│       ├── SHOT09/
-│       └── SHOT10/
+│       ├── KV04/
+│       ├── KV05/
+│       └── KV06/
 ├── 01_SELECTS/
 ├── 02_OUTPUT/
 ├── 03_TRASH/
