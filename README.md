@@ -88,7 +88,17 @@ Writing copyright directly needs Capture One Studio. Without Studio, the script 
 2. In Capture One, choose **Scripts › Open Scripts Folder** and drag **CO Super Session.scpt** into the folder that opens.
 3. Choose **Scripts › Update Scripts Menu**, then **Scripts › CO Super Session**.
 
-To update, do the same with the newer version and replace the old file. The version you have is shown in the script's window title.
+## Updating
+
+1. Download the newer **CO-Super-Session** zip from the [Releases page](../../releases) and unzip it.
+2. Close the script's window if it is open.
+3. In Capture One, choose **Scripts › Open Scripts Folder**, drag the new **CO Super Session.scpt** into it and choose **Replace**. If Finder won't replace it, move the old file to the Bin first, then drag in the new one.
+4. Choose **Scripts › Update Scripts Menu**, or restart Capture One.
+5. Run the script and check that the window title shows the new version.
+
+Your saved choices are kept, because they are stored separately from the script file.
+
+If you installed from the source, get the latest source and run `./install.sh` from its folder in Terminal. It replaces the installed copy for you.
 
 ## Customising
 
