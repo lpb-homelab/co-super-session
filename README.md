@@ -96,7 +96,7 @@ A few defaults live at the top of `CO Super Session.applescript`, including a se
 
 ## Credits
 
-Originally written in 2019 as SuperSession by Louis-Philippe Beauduin. Rewritten in 2026 for Capture One 16.
+Originally written in 2019 as SuperSession by Louis-Philippe Beauduin. Rewritten in 2026 for Capture One 16 with the help of Claude Code.
 
 ## License
 
