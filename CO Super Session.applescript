@@ -1436,7 +1436,7 @@ on summaryText(sessionName, parentPath, shotNames, namingIndex, jobName, counter
 				set t to t & ind & my lastComponent(item k of shotNames) & "/" & return
 			end repeat
 		else if j > i then
-			set t to t & ind & my lastComponent(item i of shotNames) & " … " & my lastComponent(item j of shotNames) & "   (" & (j - i + 1) & ")" & return
+			set t to t & ind & my lastComponent(item i of shotNames) & " … " & my shortLast(my lastComponent(item i of shotNames), my lastComponent(item j of shotNames)) & "   (" & (j - i + 1) & ")" & return
 		else
 			set t to t & ind & my lastComponent(item i of shotNames) & return
 		end if
@@ -1451,6 +1451,27 @@ on summaryText(sessionName, parentPath, shotNames, namingIndex, jobName, counter
 	if copyrightStyle is not "" then set t to t & return & "Copyright style:  " & copyrightStyle
 	return t
 end summaryText
+
+-- "Job_SHOT01", "Job_SHOT15" -> "15": just the trailing number when both names share the same
+-- text before it; otherwise the full last name
+on shortLast(firstName, lastName)
+	set {p1, d1} to my splitTrailingDigits(firstName)
+	set {p2, d2} to my splitTrailingDigits(lastName)
+	if d2 is not "" and p1 is p2 then return d2
+	return lastName
+end shortLast
+
+-- "Job_SHOT015" -> {"Job_SHOT", "015"}
+on splitTrailingDigits(s)
+	set k to length of s
+	repeat while k > 0
+		if "0123456789" does not contain (character k of s) then exit repeat
+		set k to k - 1
+	end repeat
+	if k = (length of s) then return {s, ""}
+	if k = 0 then return {"", s}
+	return {text 1 thru k of s, text (k + 1) thru -1 of s}
+end splitTrailingDigits
 
 on parentOf(relPath)
 	-- everything before the last /: "Studio/DAY1/SHOT01" -> "Studio/DAY1"
