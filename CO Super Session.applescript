@@ -290,7 +290,7 @@ on showWindow:arg
 	set fDate to my addField(v, my formatToday(my dashOnly(fmt)), 360, y, 140)
 
 	set y to my nextRow(24)
-	my addLabel(v, "Separators:", y)
+	my addLabel(v, "Separator logic:", y)
 	set rbSep to {}
 	set sepTitles to {"ISO 8601", "All dashes", "All underscores", "ISO 8601"}
 	repeat with i from 1 to 4
