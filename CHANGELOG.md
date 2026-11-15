@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to CO Super Session are listed here. Versions follow [Semantic Versioning](https://semver.org).
+All notable changes to CO SuperSession are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
 ## 0.2.0 – 2026-11-15
 

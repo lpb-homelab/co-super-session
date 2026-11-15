@@ -1,4 +1,4 @@
--- CO Super Session
+-- CO SuperSession
 -- Every question in one window with a live preview. Creates a Capture One session with:
 --   00_RAW/_prelight (first capture folder), optional parent folders (location, day,
 --   scene, category) with numbered shot folders, 01_SELECTS, 02_OUTPUT, 03_TRASH, 04_DOCS.
@@ -130,7 +130,7 @@ on run
 		my main()
 	on error errMsg number errNum
 		my releaseWindow()
-		if errNum is not -128 then display alert "Super Session failed" message errMsg as warning
+		if errNum is not -128 then display alert "SuperSession failed" message errMsg as warning
 	end try
 end run
 
@@ -231,7 +231,7 @@ on showWindow:arg
 	if askPhotographer then set winH to winH + 32
 	set cursorTop to 20
 	set w to current application's NSWindow's alloc()'s initWithContentRect:{{0, 0}, {640, winH}} styleMask:3 backing:2 defer:false
-	w's setTitle:("New Super Session " & scriptVersion)
+	w's setTitle:("CO SuperSession " & scriptVersion)
 	w's setReleasedWhenClosed:false
 	w's setDelegate:me
 	w's setLevel:3 -- floating, stays above Capture One
