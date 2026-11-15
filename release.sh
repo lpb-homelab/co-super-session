@@ -12,7 +12,7 @@ ZIP="build/CO-SuperSession-$VERSION.zip"
 
 [ -n "$VERSION" ] || { echo "No scriptVersion found in $SRC"; exit 1; }
 [ -z "$(git status --porcelain)" ] || { echo "Commit your changes first (untracked files too)."; exit 1; }
-grep -q "^## $VERSION " CHANGELOG.md || { echo "Add a '## $VERSION' section to CHANGELOG.md first."; exit 1; }
+grep -q "^## v$VERSION " CHANGELOG.md || { echo "Add a '## v$VERSION' section to CHANGELOG.md first."; exit 1; }
 
 PKG="build/package"
 rm -rf "$PKG" "$ZIP"
@@ -29,9 +29,9 @@ ditto -c -k --sequesterRsrc "$PKG" "$ZIP"
 	echo "3. Choose **Scripts › Update Scripts Menu**, then **Scripts › CO SuperSession**."
 	echo
 	echo "## What's new"
-	awk -v v="$VERSION" '/^## /{p = index($0, "## " v " ") == 1; next} p' CHANGELOG.md
+	awk -v v="$VERSION" '/^## /{p = index($0, "## v" v " ") == 1; next} p' CHANGELOG.md
 } > build/notes.md
 
-git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || git tag -a "$TAG" -m "CO SuperSession $VERSION"
+git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || git tag -a "$TAG" -m "CO SuperSession v$VERSION"
 git push -q origin "$TAG"
-gh release create "$TAG" "$ZIP" --title "CO SuperSession $VERSION" --notes-file build/notes.md
+gh release create "$TAG" "$ZIP" --title "CO SuperSession v$VERSION" --notes-file build/notes.md

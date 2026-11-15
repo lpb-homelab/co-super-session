@@ -2,7 +2,7 @@
 
 All notable changes to CO SuperSession are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
-## 0.2.1 – 2026-11-15
+## v0.2.1 – 2026-11-15
 
 - Renamed to CO SuperSession (script file, window title and release zip). When updating, move the old CO Super Session.scpt to the Bin
 - Shot folders off with subfolders: Shot folder naming now offers parent_subfolder (KV1/KV1_main), so the parent folder can appear in capture file names
@@ -17,14 +17,14 @@ All notable changes to CO SuperSession are listed here. Versions follow [Semanti
 - Fixed: the chosen file naming, shot folder naming, numbering and shot count are remembered even when a session couldn't use them
 - Errors while building or updating the window are now shown instead of failing silently
 
-## 0.2.0 – 2026-11-15
+## v0.2.0 – 2026-11-15
 
 - Paste list: paste folder names (one per line) for the selected shot folder rows (⌘A for all), from the Paste list button or the new List column
 - Shot folder table columns size themselves to fit their content
 - Append / Replace: Append gives SHOT01_name, Replace uses the pasted names as the shot folders (folder naming still adds job, date and parent)
 - Summary shortens shot ranges again when pasted names follow the number, keeping the prefix (… SHOT05_pool)
 
-## 0.1.0 – 2026-11-15
+## v0.1.0 – 2026-11-15
 
 First release of the Capture One 16 rewrite.
 

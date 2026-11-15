@@ -264,7 +264,7 @@ on buildWindow()
 	set userW to my prefInt("winwidth", 640)
 	-- titled, closable, resizable: the width can be dragged, the height is locked (lockHeight)
 	set w to current application's NSWindow's alloc()'s initWithContentRect:{{0, 0}, {640, winH}} styleMask:11 backing:2 defer:false
-	w's setTitle:("CO SuperSession " & scriptVersion)
+	w's setTitle:("CO SuperSession v" & scriptVersion)
 	w's setReleasedWhenClosed:false
 	w's setDelegate:me
 	w's setLevel:3 -- floating, stays above Capture One
