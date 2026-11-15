@@ -411,7 +411,7 @@ on showWindow:arg
 	v's addSubview:sv
 
 	set y to my nextRow(16)
-	set hint to my addLabelAt(v, "Click a cell to edit, or List to paste folder names. Prefixes are numbered automatically.", 165, y - 3, 455)
+	set hint to my addLabelAt(v, "Click a cell to edit, or select a row to add a pasted list.", 165, y - 3, 455)
 	hint's setFont:(current application's NSFont's systemFontOfSize:10)
 	hint's setTextColor:(current application's NSColor's secondaryLabelColor())
 
