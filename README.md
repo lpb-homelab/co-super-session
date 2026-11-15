@@ -4,6 +4,8 @@ A Capture One 16 script that sets up a complete, consistently named session from
 
 Starting a shoot in Capture One usually means creating the session, renaming its folders, making a folder for every shot, setting the capture naming and adding copyright. CO SuperSession does all of that at once. You enter the client, the job and how the shoot is organised, check the preview, and start capturing.
 
+![CO SuperSession window](docs/screenshot.webp)
+
 ## What it does
 
 - Names the session from the date, client and job, for example `2026-11-14_LUMARA_Night-Glow`
