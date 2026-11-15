@@ -1,4 +1,4 @@
-# CO Super Session
+# CO SuperSession
 
 A Capture One 16 script that sets up a complete, consistently named session from a single window.
 
