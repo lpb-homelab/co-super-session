@@ -79,6 +79,9 @@ When the session is ready, Capture One opens on the first capture folder.
 
 Writing copyright directly needs Capture One Studio. Without Studio, the script can apply a saved metadata style instead.
 
+> [!CAUTION]
+> Updates within Capture One 16 are fine. After a major upgrade (17 or later), test the script on a throwaway session before a real shoot. A new version may not be found by the script, or may change the scripting commands it relies on. If the script asks where Capture One is, open **CO Super Session.scpt** in Script Editor, choose Capture One when asked, and save. If you have the source, you can run `./install.sh` again instead. Having two major versions installed at once can make the script open the wrong one.
+
 ## Installation
 
 1. Download the latest **CO-Super-Session** zip from the [Releases page](../../releases) and double-click it to unzip.
