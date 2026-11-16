@@ -2,7 +2,7 @@
 
 All notable changes to CO SuperSession are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## v0.3.0 – 2026-11-16
 
 - Shot folder table: click the Parent or Subfolder header to group the rows by that column (remembered); folders are still created and numbered in parent order
 - The folder tree preview moved to its own large, resizable window, opened with Preview file tree… (⌘P) under the file name; problems and notes now show in a line above the buttons
