@@ -48,6 +48,8 @@ property fDate : missing value
 property fPhotog : missing value
 property parentScroll : missing value
 property parentDoc : missing value
+property pdFieldW : 165 -- width of each parent and subfolder field (layoutParentDoc)
+property pdRightX : 235 -- x of the subfolder column
 property parentList : {""} -- one item per parent folder field
 property subList : {""} -- one item per subfolder field (second parent level)
 property subOn : false
@@ -56,6 +58,9 @@ property rSubField : ""
 property cbParents : missing value
 property cbShots : missing value
 property fAllCounts : missing value -- sets the number of shots for every table row
+property fAllPrefix : missing value -- sets the shot prefix of every row not typed in the table
+property rowSort : "parent" -- table order with two levels: "parent" (by parent, then subfolder) or "sub"
+property rowOwnName : {} -- per table row: true once its prefix was typed in the table (the global prefix leaves it alone)
 property cbPrelight : missing value
 property fPrelight : missing value
 property rPrelightField : ""
@@ -76,9 +81,11 @@ property pDigits : missing value
 property pNaming : missing value
 property pCounter : missing value
 property rbSep : {} -- separator radio buttons
-property previewView : missing value
+property previewView : missing value -- the folder tree, in the Preview window
+property previewPanel : missing value -- the Preview window (opened with Preview file tree…)
+property fStatus : missing value -- problems and notes, above the buttons
 property fFileName : missing value -- the resulting file name, shown large above the summary
-property formView : missing value -- the 640-wide form, kept centred when the window is widened
+property formView : missing value -- the form; its wide fields and the shots table stretch with the window
 property userW : 640 -- window width the user dragged to (remembered between runs)
 property dragStart : missing value -- {mouse x, frame x, frame width, edge sign} while the user drags an edge
 property inSymResize : false -- guards windowDidResize against its own setFrame
@@ -95,7 +102,15 @@ property winH : 0
 property cursorTop : 0
 
 property parentPath : ""
-property rowParents : {} -- shots table: one row per parent ("" = no parents)
+property rowParents : {} -- shots table: one row per parent path ("" = no parents; "Studio/DAY1" with subfolders)
+property rowTop : "" -- with two parent levels: the level 1 parents ("Studio, Rooftop"), else ""
+property tblScroll : missing value -- the shots table's scroll view, the part that grows when the window is made taller
+property tblBase : 154 -- the shots table's normal height (room for the controls beside it)
+property tblExtra : 0 -- how much taller than tblBase the table is now
+property tblFit : 0 -- extra height the table needs to show every row without scrolling
+property tblUser : 0 -- extra height the user dragged the table to (remembered between runs)
+property dragStartH : 0 -- window content height when a drag started
+property tblNeedW : 0 -- window content width at which the level 1 parents fit in the table (0 = no need)
 property rowNames : {}
 property rowCounts : {}
 property rowLists : {} -- pasted folder names per table row ({} = none)
@@ -162,6 +177,7 @@ on main()
 	set rowCounts to {}
 	set rowLists to {}
 	set rowSubs to {}
+	set rowOwnName to {}
 	set modalCode to 0
 	set uiError to ""
 
@@ -271,10 +287,10 @@ on buildWindow()
 	w's setAutorecalculatesKeyViewLoop:true -- Tab also reaches parent fields added later
 	set win to w
 	set cv to w's contentView()
-	-- the form lives in a fixed-width view that stays centred (flexible left and right margins)
-	-- and follows the window's height; the file name, preview and buttons stretch with the window
+	-- the form follows the window's size: labels stay on the left, the wide fields and the shots
+	-- table stretch, the controls at the right edge move with it (setHorizontalMasks)
 	set v to current application's NSView's alloc()'s initWithFrame:{{0, 0}, {640, winH}}
-	v's setAutoresizingMask:21
+	v's setAutoresizingMask:18
 	cv's addSubview:v
 	set formView to v
 
@@ -305,6 +321,7 @@ on buildWindow()
 	set b to current application's NSButton's buttonWithTitle:"Choose…" target:me action:"chooseLocation:"
 	b's setFrame:{{515, y - 4}, {110, 32}}
 	v's addSubview:b
+	set chooseBtn to b
 	my showLocation()
 
 	-- session folder names; the settings at the top of the script are the defaults
@@ -388,9 +405,9 @@ on buildWindow()
 	v's addSubview:parentScroll
 	my rebuildParentRows(0)
 
-	set y to my nextRow(130)
+	set y to my nextRow(tblBase)
 	set cbShots to current application's NSButton's checkboxWithTitle:"Shot folders:" target:me action:"shotsToggled:"
-	cbShots's setFrame:{{18, y + 104}, {145, 22}}
+	cbShots's setFrame:{{18, y + 130}, {145, 22}}
 	if my readPref("shotfolders", "") is "" then
 		-- no saved choice yet: 0 shots = no shot folders
 		if defCount is not "0" then cbShots's setState:1
@@ -398,23 +415,31 @@ on buildWindow()
 		cbShots's setState:1
 	end if
 	v's addSubview:cbShots
-	-- one number for every row, applied as you type
-	set allLbl to my addLabelAt(v, "#", 86, y + 71, 12)
+	-- values for every row: one number, applied as you type, and one prefix
+	set allLbl to my addLabelAt(v, "Global #:", 10, y + 92, 84)
 	allLbl's setFont:(current application's NSFont's systemFontOfSize:11)
-	set fAllCounts to my addField(v, "", 98, y + 71, 45)
+	allLbl's setAlignment:(current application's NSTextAlignmentRight)
+	set fAllCounts to my addField(v, "", 98, y + 92, 60)
 	fAllCounts's setTag:300
 	fAllCounts's setToolTip:"Number of shots for every row in the table"
+	-- the prefix: a prefix typed in the table wins over it
+	set preLbl to my addLabelAt(v, "Global prefix:", 10, y + 62, 84)
+	preLbl's setFont:(current application's NSFont's systemFontOfSize:11)
+	preLbl's setAlignment:(current application's NSTextAlignmentRight)
+	set fAllPrefix to my addField(v, "", 98, y + 62, 60)
+	fAllPrefix's setTag:301
+	fAllPrefix's setToolTip:"Shot prefix for every row in the table, except rows whose prefix you typed in the table." & linefeed & "Clear a row's prefix in the table to give it this one again."
 	-- a pasted list of folder names for the selected row
 	set btnPaste to current application's NSButton's buttonWithTitle:"Paste list…" target:me action:"pasteList:"
-	btnPaste's setFrame:{{12, y + 34}, {145, 32}}
+	btnPaste's setFrame:{{12, y + 18}, {145, 32}}
 	btnPaste's setToolTip:"Paste folder names, one per line, for the selected row"
 	v's addSubview:btnPaste
 	-- radio buttons sharing a superview and an action work as one group
 	set rbAppend to current application's NSButton's radioButtonWithTitle:"Append" target:me action:"shotsToggled:"
-	rbAppend's setFrame:{{18, y + 12}, {70, 18}}
+	rbAppend's setFrame:{{18, y}, {70, 18}}
 	rbAppend's setToolTip:"Pasted names go after the shot number: SHOT01_name"
 	set rbReplace to current application's NSButton's radioButtonWithTitle:"Replace" target:me action:"shotsToggled:"
-	rbReplace's setFrame:{{88, y + 12}, {75, 18}}
+	rbReplace's setFrame:{{88, y}, {75, 18}}
 	rbReplace's setToolTip:"Pasted names are the shot folders: no prefix, no number"
 	repeat with rb in {rbAppend, rbReplace}
 		((contents of rb)'s setControlSize:1)
@@ -426,18 +451,23 @@ on buildWindow()
 	else
 		rbReplace's setState:1
 	end if
-	set sv to current application's NSScrollView's alloc()'s initWithFrame:{{165, y}, {455, 130}}
+	set sv to current application's NSScrollView's alloc()'s initWithFrame:{{165, y}, {455, tblBase}}
 	sv's setHasVerticalScroller:true
 	sv's setBorderType:2
-	set tbl to current application's NSTableView's alloc()'s initWithFrame:{{0, 0}, {455, 130}}
-	repeat with c in {{"parent", "Parent", 130, false}, {"name", "Shot prefix", 165, true}, {"count", "Shots", 60, true}, {"list", "List", 75, false}}
+	set tbl to current application's NSTableView's alloc()'s initWithFrame:{{0, 0}, {455, tblBase}}
+	repeat with c in {{"top", "Parent", 100, false}, {"parent", "Parent", 130, false}, {"name", "Shot prefix", 165, true}, {"count", "Shots", 60, true}, {"list", "List", 75, false}}
 		set {cid, ctitle, cw, ced} to contents of c
 		set col to (current application's NSTableColumn's alloc()'s initWithIdentifier:cid)
 		(col's headerCell()'s setStringValue:ctitle)
 		(col's setWidth:cw)
 		(col's setEditable:ced)
+		(col's dataCell()'s setLineBreakMode:4) -- … at the end when it doesn't fit
 		(tbl's addTableColumn:col)
 	end repeat
+	-- level 1 parents: only shown with two parent levels (rows are then per subfolder)
+	set col to tbl's tableColumnWithIdentifier:"top"
+	col's setHidden:true
+	col's setHeaderToolTip:"The parent folders each subfolder row is created in"
 	-- Subfolders: a checkbox per row; only checked rows get the shot subfolders
 	set col to current application's NSTableColumn's alloc()'s initWithIdentifier:"subs"
 	col's headerCell()'s setStringValue:"Subfolders"
@@ -452,6 +482,8 @@ on buildWindow()
 	col's setHeaderToolTip:"Checked rows get the Shot subfolders inside each of their shot folders"
 	tbl's addTableColumn:col
 	tbl's setAllowsColumnReordering:false
+	tbl's setAllowsColumnSelection:false -- a header click sorts (Parent, Subfolder) instead
+	set rowSort to my readPref("tablesort", "parent")
 	tbl's setAllowsMultipleSelection:true -- ⌘A or ⌘/⇧-click: paste one list into several rows
 	tbl's setColumnAutoresizingStyle:0 -- sizeColumns fits them to their content
 	tbl's setUsesAlternatingRowBackgroundColors:true
@@ -461,6 +493,10 @@ on buildWindow()
 	tbl's setAction:"tableClicked:"
 	sv's setDocumentView:tbl
 	v's addSubview:sv
+	set tblScroll to sv
+	set tblExtra to 0
+	set tblFit to 0
+	set tblUser to my prefInt("tableextra", 0)
 
 	set y to my nextRow(16)
 	set hint to my addLabelAt(v, "Click a cell to edit, or select one or more rows to add a pasted list.", 165, y - 3, 455)
@@ -480,7 +516,7 @@ on buildWindow()
 	set y to my nextRow(26)
 	my addLabel(v, "Shot folder naming:", y)
 	set pMode to my addPopup(v, 165, y, 320)
-	my addLabelAt(v, "digits:", 495, y, 50)
+	set digitsLbl1 to my addLabelAt(v, "digits:", 495, y, 50)
 	set pDigits to my addPopup(v, 545, y, 75)
 	pDigits's addItemsWithTitles:{"1", "2", "3"}
 	pDigits's selectItemAtIndex:((my clampInt(my prefInt("digits", 2), 1, 3)) - 1)
@@ -488,13 +524,14 @@ on buildWindow()
 	set y to my nextRow(26)
 	my addLabel(v, "Capture file naming:", y)
 	set pNaming to my addPopup(v, 165, y, 320)
-	my addLabelAt(v, "digits:", 495, y, 50)
+	set digitsLbl2 to my addLabelAt(v, "digits:", 495, y, 50)
 	set pCounter to my addPopup(v, 545, y, 75)
 	pCounter's addItemsWithTitles:{"1", "2", "3", "4", "5", "6"}
 	pCounter's selectItemAtIndex:((my clampInt(my prefInt("counterdigits", 4), 1, 6)) - 1)
 
 	-- the end result: what the files will be called
 	set v to cv
+	set cursorTop to cursorTop + 14 -- breathing room below the popups
 	set y to my nextRow(32)
 	set fFileName to current application's NSTextField's labelWithString:""
 	fFileName's setFrame:{{20, y}, {600, 30}}
@@ -506,25 +543,33 @@ on buildWindow()
 	fFileName's setLineBreakMode:5
 	v's addSubview:fFileName
 
-	-- live preview fills the space down to the buttons
-	set ph to winH - cursorTop - 60
-	set psv to current application's NSScrollView's alloc()'s initWithFrame:{{20, 60}, {600, ph}}
-	psv's setHasVerticalScroller:true
-	psv's setBorderType:2
-	psv's setAutoresizingMask:2
-	set previewView to current application's NSTextView's alloc()'s initWithFrame:{{0, 0}, {590, ph}}
-	previewView's setAutoresizingMask:2
-	previewView's setEditable:false
-	previewView's setFont:(current application's NSFont's monospacedSystemFontOfSize:11 weight:0)
-	previewView's setTextContainerInset:{8, 8}
-	-- long folder names scroll sideways instead of wrapping
-	previewView's textContainer()'s setWidthTracksTextView:false
-	previewView's textContainer()'s setContainerSize:{10000, 10000}
-	previewView's setHorizontallyResizable:true
-	previewView's setMaxSize:{10000, 10000}
-	psv's setHasHorizontalScroller:true
-	psv's setDocumentView:previewView
-	v's addSubview:psv
+	-- the whole folder tree opens in its own window
+	set y to my nextRow(24)
+	set b to current application's NSButton's buttonWithTitle:"Preview file tree…" target:me action:"showPreview:"
+	b's sizeToFit()
+	set {{bfx, bfy}, {bw, bh}} to b's frame()
+	set bw to bw + 24
+	b's setFrame:{{(640 - bw) div 2, y - 4}, {bw, 32}}
+	b's setAutoresizingMask:5 -- stays centred
+	b's setKeyEquivalent:"p"
+	b's setKeyEquivalentModifierMask:(current application's NSEventModifierFlagCommand)
+	b's setToolTip:"⌘P"
+	v's addSubview:b
+	my buildPreviewPanel()
+
+	-- problems (red) and notes (orange); empty when all is well
+	set y to my nextRow(30)
+	set fStatus to current application's NSTextField's wrappingLabelWithString:""
+	fStatus's setFrame:{{20, y}, {600, 30}}
+	fStatus's setAutoresizingMask:2
+	fStatus's setFont:(current application's NSFont's systemFontOfSize:11)
+	fStatus's setAlignment:(current application's NSTextAlignmentCenter)
+	fStatus's setMaximumNumberOfLines:2
+	fStatus's cell()'s setTruncatesLastVisibleLine:true
+	v's addSubview:fStatus
+
+	-- the window was sized for the old preview: take out the space left above the buttons
+	my shrinkAboveButtons(y - 55)
 
 	set cancelBtn to my addButton(v, "Cancel", 395, 100, 0)
 	cancelBtn's setKeyEquivalent:(character id 27)
@@ -533,9 +578,19 @@ on buildWindow()
 	cancelBtn's setAutoresizingMask:1 -- buttons stay at the right edge
 	createBtn's setAutoresizingMask:1
 
+	set stretchy to {fClient, fJob, fLocation, parentScroll, tblScroll, hint, fShotSubs, pNumbering, pMode, pNaming}
+	if askPhotographer then set end of stretchy to fPhotog
+	repeat with x in stretchy
+		my setHMask(contents of x, 2)
+	end repeat
+	repeat with x in {chooseBtn, digitsLbl1, pDigits, digitsLbl2, pCounter}
+		my setHMask(contents of x, 1)
+	end repeat
+
 	my syncRows()
 	my refresh()
 	my lockHeight()
+	my fitTable()
 	w's |center|()
 	nsApp's activateIgnoringOtherApps:true
 	w's makeKeyAndOrderFront:me
@@ -543,7 +598,72 @@ on buildWindow()
 	w's makeFirstResponder:fClient
 	nsApp's runModalForWindow:w
 	w's orderOut:me
+	previewPanel's orderOut:me
 end buildWindow
+
+-- The Preview window: the folder tree in a large, resizable window that stays usable
+-- while the main window is modal; it follows every edit
+on buildPreviewPanel()
+	set {{vx, vy}, {vw, vh}} to current application's NSScreen's mainScreen()'s visibleFrame()
+	set ph to (vh - 80) as integer
+	if ph > 1000 then set ph to 1000
+	set p to current application's NSPanel's alloc()'s initWithContentRect:{{0, 0}, {760, ph}} styleMask:11 backing:2 defer:false
+	p's setTitle:"File tree preview"
+	p's setReleasedWhenClosed:false
+	p's setWorksWhenModal:true
+	p's setHidesOnDeactivate:false
+	p's setLevel:3 -- floating, like the main window
+	p's setContentMinSize:{400, 200}
+	set psv to current application's NSScrollView's alloc()'s initWithFrame:{{0, 0}, {760, ph}}
+	psv's setAutoresizingMask:18
+	psv's setBorderType:0
+	psv's setHasVerticalScroller:true
+	psv's setHasHorizontalScroller:true
+	set previewView to current application's NSTextView's alloc()'s initWithFrame:{{0, 0}, {760, ph}}
+	previewView's setAutoresizingMask:2
+	previewView's setEditable:false
+	previewView's setFont:(current application's NSFont's monospacedSystemFontOfSize:12 weight:0)
+	previewView's setTextContainerInset:{12, 12}
+	-- long folder names scroll sideways instead of wrapping
+	previewView's textContainer()'s setWidthTracksTextView:false
+	previewView's textContainer()'s setContainerSize:{10000, 10000}
+	previewView's setHorizontallyResizable:true
+	previewView's setMaxSize:{10000, 10000}
+	psv's setDocumentView:previewView
+	p's contentView()'s addSubview:psv
+	set previewPanel to p
+end buildPreviewPanel
+
+-- opens the Preview window beside the main window (or over its right side when there's no room)
+on showPreview:sender
+	win's makeFirstResponder:(missing value) -- commits a table cell still being edited
+	my refresh()
+	if not ((previewPanel's isVisible()) as boolean) then
+		set {{fx, fy}, {fw, fh}} to win's frame()
+		set {{px, py}, {pw, ph}} to previewPanel's frame()
+		set {{vx, vy}, {vw, vh}} to win's screen()'s visibleFrame()
+		set x to fx + fw + 12
+		if x + pw > vx + vw then set x to vx + vw - pw
+		set y to fy + fh - ph
+		if y < vy then set y to vy
+		previewPanel's setFrameOrigin:{x, y}
+	end if
+	previewPanel's makeKeyAndOrderFront:me
+end showPreview:
+
+-- Lowers the window's top by gap: everything but the bottom buttons moves down with it
+on shrinkAboveButtons(gap)
+	if gap < 1 then return
+	set cv to win's contentView()
+	cv's setAutoresizesSubviews:false
+	set {{fx, fy}, {fw, fh}} to win's frame()
+	win's setFrame:{{fx, fy + gap}, {fw, fh - gap}} display:false
+	repeat with sv in (cv's subviews() as list)
+		set {{sx, sy}, {sw, sh}} to sv's frame()
+		if (sv's isEqual:formView) as boolean or sy > 50 then (sv's setFrameOrigin:{sx, sy - gap})
+	end repeat
+	cv's setAutoresizesSubviews:true
+end shrinkAboveButtons
 
 -- Every edit lands here; recomputes names, checks for problems, updates popups and preview.
 -- An error in it is shown in the preview (and blocks Create Session) instead of vanishing.
@@ -555,6 +675,7 @@ on refresh()
 		try
 			previewView's setString:problem
 			previewView's setTextColor:(current application's NSColor's systemRedColor())
+			my setStatus(problem, current application's NSColor's systemRedColor())
 			createBtn's setEnabled:false
 		end try
 	end try
@@ -660,6 +781,7 @@ on refreshBody()
 	end if
 	tbl's setEnabled:shotsOn
 	fAllCounts's setEnabled:shotsOn
+	fAllPrefix's setEnabled:shotsOn
 	btnPaste's setEnabled:(shotsOn and (tbl's numberOfSelectedRows()) as integer > 0)
 	set anyList to false
 	repeat with L in rowLists
@@ -696,19 +818,19 @@ on refreshBody()
 			set rGroupSubs to {my rowHasSubs(1)}
 		end if
 	else
-		-- one table row per direct parent (with subfolders: per subfolder, shared by every parent)
+		-- one table row per parent path (with subfolders: per parent and subfolder pair)
 		repeat with i from 1 to n
 			set p to item i of parentNames
-			set r to my posOfText(my lastComponent(p), rowParents)
+			set r to my posOfText(p, rowParents)
 			if r > 0 and r ≤ (count of rowNames) then
 				set nm to my trim(item r of rowNames)
 				set L to my cleanList(item r of rowLists)
 				if L is {} then
-					set c to my parseCount(item r of rowCounts, 1, my lastComponent(p) & ": number of shots must be a whole number from 1 to 999.")
+					set c to my parseCount(item r of rowCounts, 1, p & ": number of shots must be a whole number from 1 to 999.")
 				else
 					set c to count of L
 				end if
-				if nm contains "/" or nm contains ":" then my addProblem(my lastComponent(p) & ": please don't use / or : in the shot prefix.")
+				if nm contains "/" or nm contains ":" then my addProblem(p & ": please don't use / or : in the shot prefix.")
 				set end of rGroups to {p, nm, c}
 				set end of rGroupLists to L
 				set end of rGroupSubs to my rowHasSubs(r)
@@ -879,7 +1001,9 @@ on refreshBody()
 		if warn is "" then
 			previewView's setString:summ
 			previewView's setTextColor:(current application's NSColor's labelColor())
+			my setStatus("", missing value)
 		else
+			my setStatus(warn, current application's NSColor's systemOrangeColor())
 			-- a note, not a problem: Create Session stays available
 			previewView's setString:(warn & return & return & summ)
 			previewView's setTextColor:(current application's NSColor's labelColor())
@@ -891,12 +1015,23 @@ on refreshBody()
 		my setPreviewWrap(true) -- problem messages wrap; the folder tree scrolls sideways
 		previewView's setString:problem
 		previewView's setTextColor:(current application's NSColor's systemRedColor())
+		my setStatus(problem, current application's NSColor's systemRedColor())
 	end if
 	createBtn's setEnabled:(problem is "")
-	if (tbl's editedRow()) as integer < 0 then my sizeColumns() -- not while a cell is being typed in
-	my fitPreview()
+	if (tbl's editedRow()) as integer < 0 then
+		my sizeColumns() -- not while a cell is being typed in
+		my fitWidth() -- the level 1 parents may need a wider table (it refits the columns)
+	end if
 	my updateSepTips()
 end refreshBody
+
+-- the problem or note above the buttons (two lines at most; the full text is its tooltip)
+on setStatus(t, col)
+	if fStatus is missing value then return
+	fStatus's setStringValue:t
+	fStatus's setToolTip:t
+	if col is not missing value then fStatus's setTextColor:col
+end setStatus
 
 -- Separator tooltips: a fixed example file name (today's date, client, job name, DAY01,
 -- SHOT01, 0001) written with each separator style
@@ -1043,7 +1178,8 @@ on rebuildParentRows(focusTag)
 	set docH to (my parentRows()) * 30
 	if docH < areaH then set docH to areaH
 	parentDoc's setSubviews:{}
-	parentDoc's setFrameSize:{460, docH}
+	my parentColumns()
+	parentDoc's setFrameSize:{(parentScroll's contentSize()'s width) as integer, docH}
 
 	-- left column: level 1
 	set n to count of parentList
@@ -1053,7 +1189,7 @@ on rebuildParentRows(focusTag)
 
 	-- right column: Subfolders checkbox, then level 2
 	set cbSub to current application's NSButton's checkboxWithTitle:"Subfolders" target:me action:"subToggled:"
-	cbSub's setFrame:{{234, docH - 26}, {200, 22}}
+	cbSub's setFrame:{{pdRightX - 1, docH - 26}, {200, 22}}
 	if subOn then cbSub's setState:1
 	cbSub's setEnabled:isOn
 	cbSub's setToolTip:"A second folder level inside every parent folder, e.g. Studio/DAY1"
@@ -1061,7 +1197,7 @@ on rebuildParentRows(focusTag)
 	if subOn then
 		set n to count of subList
 		repeat with i from 1 to n
-			my addFolderRow(item i of subList, 235, docH - 27 - i * 30, 200 + i, i, n, isOn, "addSub:", "removeSub:", "e.g. DAY1, Look 1")
+			my addFolderRow(item i of subList, pdRightX, docH - 27 - i * 30, 200 + i, i, n, isOn, "addSub:", "removeSub:", "e.g. DAY1, Look 1")
 		end repeat
 	end if
 
@@ -1078,10 +1214,59 @@ on rebuildParentRows(focusTag)
 	end if
 end rebuildParentRows
 
+-- Spreads the five session folder fields over the form's width, equally wide
+on layoutFolders()
+	if fFolders is {} or formView is missing value then return
+	set {{fx, fy}, {fw, fh}} to formView's frame()
+	set w to ((fw - 20 - 165 - 4 * 5) / 5) as integer
+	repeat with i from 1 to count of fFolders
+		set f to item i of fFolders
+		set {{x, y}, {ww, hh}} to f's frame()
+		(f's setFrame:{{165 + (i - 1) * (w + 5), y}, {w, hh}})
+	end repeat
+end layoutFolders
+
+-- Splits the parent area's width into the parent and subfolder columns:
+-- each a field (up to 360 wide) with its + and − buttons
+on parentColumns()
+	set w to (parentScroll's contentSize()'s width) as integer
+	set colW to (w - 14) div 2
+	set fw to colW - 56
+	if fw < 120 then set fw to 120
+	if fw > 360 then set fw to 360
+	set pdFieldW to fw
+	set pdRightX to 3 + fw + 56 + 11
+end parentColumns
+
+-- After a width change: moves and widens the fields and buttons already there,
+-- without rebuilding them (that would end any typing in them)
+on layoutParentDoc()
+	if parentDoc is missing value then return
+	set {oldW, oldX} to {pdFieldW, pdRightX}
+	my parentColumns()
+	set {{dx, dy}, {dw, dh}} to parentDoc's frame()
+	parentDoc's setFrameSize:{(parentScroll's contentSize()'s width) as integer, dh}
+	if oldW is pdFieldW and oldX is pdRightX then return
+	repeat with sub in (parentDoc's subviews() as list)
+		set {{sx, sy}, {sw, sh}} to (contents of sub)'s frame()
+		if sx < oldX - 5 then
+			set {colOld, colNew} to {3, 3}
+		else
+			set {colOld, colNew} to {oldX, pdRightX}
+		end if
+		set off to sx - colOld
+		if off > oldW then set off to off - oldW + pdFieldW -- a + or − button after the field
+		((contents of sub)'s setFrameOrigin:{colNew + off, sy})
+		if ((contents of sub)'s isKindOfClass:(current application's NSTextField's |class|())) as boolean then
+			((contents of sub)'s setFrameSize:{pdFieldW, sh})
+		end if
+	end repeat
+end layoutParentDoc
+
 -- one field with + and − (− only when there is more than one row)
 on addFolderRow(t, x, ry, fieldTag, i, n, isOn, addAction, removeAction, hint)
 	set f to current application's NSTextField's textFieldWithString:t
-	f's setFrame:{{x, ry}, {165, 24}}
+	f's setFrame:{{x, ry}, {pdFieldW, 24}}
 	f's setTag:fieldTag
 	f's setDelegate:me
 	-- (no placeholder text in parent and subfolder fields)
@@ -1089,7 +1274,7 @@ on addFolderRow(t, x, ry, fieldTag, i, n, isOn, addAction, removeAction, hint)
 	parentDoc's addSubview:f
 	set b to current application's NSButton's buttonWithImage:(current application's NSImage's imageNamed:"NSAddTemplate") target:me action:addAction
 	b's setBezelStyle:10
-	b's setFrame:{{x + 170, ry}, {24, 24}}
+	b's setFrame:{{x + pdFieldW + 5, ry}, {24, 24}}
 	b's setTag:i
 	b's setEnabled:isOn
 	b's setToolTip:"Add a folder below"
@@ -1097,7 +1282,7 @@ on addFolderRow(t, x, ry, fieldTag, i, n, isOn, addAction, removeAction, hint)
 	if n > 1 then
 		set b to current application's NSButton's buttonWithImage:(current application's NSImage's imageNamed:"NSRemoveTemplate") target:me action:removeAction
 		b's setBezelStyle:10
-		b's setFrame:{{x + 197, ry}, {24, 24}}
+		b's setFrame:{{x + pdFieldW + 32, ry}, {24, 24}}
 		b's setTag:i
 		b's setEnabled:isOn
 		b's setToolTip:"Remove this folder"
@@ -1181,13 +1366,9 @@ on syncRows()
 	on error
 		return -- invalid names: refresh shows the problem, keep the rows
 	end try
-	-- table rows are keyed by the direct parent; with subfolders that is each subfolder once
-	set keys to {}
-	repeat with p in names
-		set k to my lastComponent(contents of p)
-		if my posOfText(k, keys) is 0 then set end of keys to k
-	end repeat
-	set names to keys
+	my syncTop(names)
+	set names to my sortedRows(names)
+	-- table rows are keyed by the parent path: "Studio", or "Studio/DAY1" with subfolders
 	if (count of names) is 0 then set names to {""}
 	considering case
 		if names is rowParents then return
@@ -1196,6 +1377,7 @@ on syncRows()
 	set newCounts to {}
 	set newLists to {}
 	set newSubs to {}
+	set newOwn to {}
 	-- each row keeps the data of the old row with the same parent, so removing a parent
 	-- doesn't hand its prefix and pasted list to the next one. src: old row per new row, 0 = new
 	set oldN to count of rowNames
@@ -1220,6 +1402,7 @@ on syncRows()
 		-- a pasted list belongs to its row only; new rows start without one, Subfolders checked
 		if r > 0 then
 			set end of newSubs to my rowHasSubs(r)
+			set end of newOwn to my rowIsOwn(r)
 			if r ≤ (count of rowLists) then
 				set end of newLists to item r of rowLists
 			else
@@ -1229,6 +1412,7 @@ on syncRows()
 			set c to item r of rowCounts
 		else
 			set end of newSubs to true
+			set end of newOwn to false
 			set end of newLists to {}
 			if i > 1 then
 				set nm to item (i - 1) of newNames
@@ -1238,7 +1422,11 @@ on syncRows()
 				set c to defCount
 			end if
 		end if
-		-- new rows follow the All rows number when one is set
+		-- new rows follow the global prefix and number when they are set
+		if r is 0 and fAllPrefix is not missing value then
+			set allP to my trim((fAllPrefix's stringValue()) as text)
+			if allP is not "" then set nm to allP
+		end if
 		if r is 0 and fAllCounts is not missing value then
 			set allT to my trim((fAllCounts's stringValue()) as text)
 			if allT is not "" then set c to allT
@@ -1252,8 +1440,97 @@ on syncRows()
 	set rowCounts to newCounts
 	set rowLists to newLists
 	set rowSubs to newSubs
+	set rowOwnName to newOwn
 	tbl's reloadData()
+	my fitTable() -- taller or shorter, so every row shows
 end syncRows
+
+-- With two parent levels, shows the level 1 parent of each row in its own column
+-- and calls the direct parent column Subfolder; with one level that column is hidden
+on syncTop(paths)
+	set tops to {}
+	repeat with p in paths
+		set k to my parentOf(contents of p)
+		if k is not "" and my posOfText(k, tops) is 0 then set end of tops to k
+	end repeat
+	set oldTID to AppleScript's text item delimiters
+	set AppleScript's text item delimiters to ", "
+	set t to tops as text
+	set AppleScript's text item delimiters to oldTID
+	considering case
+		if t is rowTop then return
+	end considering
+	set rowTop to t
+	(tbl's tableColumnWithIdentifier:"top")'s setHidden:(t is "")
+	if t is "" then
+		(tbl's tableColumnWithIdentifier:"parent")'s headerCell()'s setStringValue:"Parent"
+	else
+		(tbl's tableColumnWithIdentifier:"parent")'s headerCell()'s setStringValue:"Subfolder"
+	end if
+	my showSortIndicator()
+	tbl's headerView()'s setNeedsDisplay:true
+	tbl's reloadData()
+end syncTop
+
+-- The table's row order: by parent (as the parents are listed), or with "sub" by subfolder,
+-- each subfolder's parents in their listed order. Only the table; folders are made in parent order.
+on sortedRows(paths)
+	if rowSort is not "sub" or rowTop is "" then return paths
+	set keys to {}
+	repeat with p in paths
+		set k to my lastComponent(contents of p)
+		if my posOfText(k, keys) is 0 then set end of keys to k
+	end repeat
+	set out to {}
+	repeat with k in keys
+		repeat with p in paths
+			if my lastComponent(contents of p) is (contents of k) then set end of out to contents of p
+		end repeat
+	end repeat
+	return out
+end sortedRows
+
+-- the arrow in the header of the column the rows are sorted by (with two levels only)
+on showSortIndicator()
+	set colTop to tbl's tableColumnWithIdentifier:"top"
+	set colSub to tbl's tableColumnWithIdentifier:"parent"
+	tbl's setIndicatorImage:(missing value) inTableColumn:colTop
+	tbl's setIndicatorImage:(missing value) inTableColumn:colSub
+	if rowTop is "" then return
+	set img to current application's NSImage's imageNamed:"NSAscendingSortIndicator"
+	if rowSort is "sub" then
+		tbl's setIndicatorImage:img inTableColumn:colSub
+	else
+		tbl's setIndicatorImage:img inTableColumn:colTop
+	end if
+end showSortIndicator
+
+-- clicking the Parent or Subfolder header sorts the rows by that column
+on tableView:tv didClickTableColumn:col
+	if rowTop is "" then return -- one level: nothing to sort by
+	set cid to (col's identifier()) as text
+	if cid is "top" then
+		set newSort to "parent"
+	else if cid is "parent" then
+		set newSort to "sub"
+	else
+		return
+	end if
+	if newSort is rowSort then return
+	win's makeFirstResponder:(missing value) -- commits a table cell still being edited
+	tbl's deselectAll:me
+	set rowSort to newSort
+	my writePref("tablesort", rowSort)
+	my syncRows()
+	my showSortIndicator()
+	my refresh()
+end tableView:didClickTableColumn:
+
+-- true when row i's prefix was typed in the table, so the global prefix doesn't change it
+on rowIsOwn(i)
+	if i > (count of rowOwnName) then return false
+	return item i of rowOwnName
+end rowIsOwn
 
 -- the Subfolders checkbox of table row i (1-based); checked unless it was turned off
 on rowHasSubs(i)
@@ -1270,9 +1547,10 @@ on controlTextDidChange:aNotification
 			set r to (tbl's editedRow()) as integer
 			set c to (tbl's editedColumn()) as integer
 			set t to ((aNotification's userInfo()'s objectForKey:"NSFieldEditor")'s |string|()) as text
+			set cid to ((item (c + 1) of (tbl's tableColumns() as list))'s identifier()) as text
 			if r ≥ 0 and r < (count of rowNames) then
-				if c is 1 then set item (r + 1) of rowNames to t
-				if c is 2 then set item (r + 1) of rowCounts to t
+				if cid is "name" then set item (r + 1) of rowNames to t
+				if cid is "count" then set item (r + 1) of rowCounts to t
 			end if
 		end try
 	else if (obj's isEqual:fDateFmt) as boolean then
@@ -1283,6 +1561,15 @@ on controlTextDidChange:aNotification
 		if t is not "" then
 			repeat with k from 1 to count of rowCounts
 				set item k of rowCounts to t
+			end repeat
+			tbl's reloadData()
+		end if
+	else if (obj's tag()) as integer is 301 then
+		-- shot prefix for every row the table hasn't given its own
+		set t to my trim((obj's stringValue()) as text)
+		if t is not "" then
+			repeat with k from 1 to count of rowNames
+				if not my rowIsOwn(k) then set item k of rowNames to t
 			end repeat
 			tbl's reloadData()
 		end if
@@ -1349,21 +1636,24 @@ on tableClicked:sender
 		set rows to my selectedRows()
 		if (r + 1) is not in rows then set rows to {r + 1}
 		my openPaste(rows)
-	else if c > 0 and my canEdit(col, r + 1) then
+	else if (col's identifier()) as text is not in {"top", "parent"} and my canEdit(col, r + 1) then
 		tbl's editColumn:c row:r withEvent:(missing value) |select|:true
 	end if
 end tableClicked:
 
--- Fits Parent, Shots and List to their widest text; Shot prefix gets the rest of the width
+-- Fits the parent columns, Shots and List to their widest text; Shot prefix gets the rest of the width
 on sizeColumns()
 	set cols to tbl's tableColumns() as list
 	set avail to ((tbl's enclosingScrollView()'s contentSize())'s width) as real
 	set gap to ((tbl's intercellSpacing())'s width) as real
+	set topOn to (rowTop is not "")
 	set wants to {}
-	repeat with col in items 1 thru 4 of cols
+	repeat with col in items 1 thru 5 of cols
 		set f to (col's dataCell()'s |font|())
 		set attrs to (current application's NSDictionary's dictionaryWithObject:f forKey:(current application's NSFontAttributeName))
 		set w to ((((current application's NSString's stringWithString:((col's headerCell()'s stringValue()) as text))'s sizeWithAttributes:attrs)'s width) as real) + 12
+		-- the sortable Parent and Subfolder headers also hold the sort arrow
+		if topOn and (col's identifier()) as text is in {"top", "parent"} then set w to w + 16
 		repeat with r from 0 to (count of rowNames) - 1
 			set t to (my tableView:tbl objectValueForTableColumn:col row:r) as text
 			set cw to ((((current application's NSString's stringWithString:t)'s sizeWithAttributes:attrs)'s width) as real) + 10
@@ -1371,17 +1661,40 @@ on sizeColumns()
 		end repeat
 		set end of wants to w
 	end repeat
-	set {wP, wN, wC, wL} to wants
+	set {wT, wP, wN, wC, wL} to wants
 	set wC to my clampInt(wC, 50, 90)
 	set wL to my clampInt(wL, 60, 100)
 	set wS to 75 -- Subfolders: fixed, fits its header
-	set spare to avail - wC - wL - wS - 5 * gap
-	-- the parent gets what it needs, but leaves the prefix at least 120
-	if wP > spare - 120 then set wP to spare - 120
-	if wP < 70 then set wP to 70
-	set wN to spare - wP
-	repeat with k from 1 to 5
-		((item k of cols)'s setWidth:(item k of {wP, wN, wC, wL, wS}))
+	set nGaps to 5
+	if topOn then set nGaps to 6
+	set spare to avail - wC - wL - wS - nGaps * gap
+	-- the window width at which the level 1 parents (up to 300) fit beside a 120 prefix
+	set tblNeedW to 0
+	if topOn then
+		set wantT to wT
+		if wantT > 300 then set wantT to 300
+		set wantP to wP
+		if wantP < 50 then set wantP to 50
+		set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
+		set tblNeedW to (cw + (wantT + wantP + 120 - spare)) as integer
+	end if
+	-- the parents get what they need, but leave the prefix at least 120 (80 with two levels);
+	-- with two levels the subfolder comes first and the level 1 list, the same on every row,
+	-- takes what is left (it ends in … when it doesn't fit)
+	if topOn then
+		if wP > spare / 3 then set wP to spare / 3
+		if wP < 50 then set wP to 50
+		set room to spare - wP - 80
+		if wT > room then set wT to room
+		if wT < 40 then set wT to 40
+	else
+		set wT to 0
+		if wP > spare - 120 then set wP to spare - 120
+		if wP < 70 then set wP to 70
+	end if
+	set wN to spare - wP - wT
+	repeat with k from 1 to 6
+		((item k of cols)'s setWidth:(item k of {wT, wP, wN, wC, wL, wS}))
 	end repeat
 end sizeColumns
 
@@ -1396,6 +1709,7 @@ on canEdit(col, i)
 end canEdit
 
 on tableView:tv shouldEditTableColumn:col row:r
+	if (col's identifier()) as text is in {"top", "parent"} then return false
 	return my canEdit(col, (r as integer) + 1)
 end tableView:shouldEditTableColumn:row:
 
@@ -1422,10 +1736,11 @@ on tableView:tv objectValueForTableColumn:col row:r
 	set i to (r as integer) + 1
 	if i > (count of rowNames) then return ""
 	set cid to (col's identifier()) as text
+	if cid is "top" then return my parentOf(item i of rowParents)
 	if cid is "parent" then
 		set p to item i of rowParents
 		if p is "" then return rawName -- no parent folders: shots go straight into RAW
-		return my lastComponent(p) -- direct parent only; the full path is in the preview
+		return my lastComponent(p) -- direct parent only; the level 1 parent has its own column
 	else if cid is "name" then
 		return item i of rowNames
 	else if cid is "subs" then
@@ -1457,7 +1772,20 @@ on tableView:tv setObjectValue:val forTableColumn:col row:r
 	end if
 	set t to ""
 	if val is not missing value then set t to val as text
-	if cid is "name" then set item i of rowNames to t
+	if cid is "name" then
+		repeat while (count of rowOwnName) < i
+			set end of rowOwnName to false
+		end repeat
+		set allP to my trim((fAllPrefix's stringValue()) as text)
+		if my trim(t) is "" and allP is not "" then
+			-- cleared: the row follows the global prefix again
+			set t to allP
+			set item i of rowOwnName to false
+		else
+			set item i of rowOwnName to (t is not allP)
+		end if
+		set item i of rowNames to t
+	end if
 	if cid is "count" then set item i of rowCounts to t
 	my refresh()
 end tableView:setObjectValue:forTableColumn:row:
@@ -1489,12 +1817,8 @@ on openPaste(rows)
 	end repeat
 	win's makeFirstResponder:(missing value) -- commits a table cell still being edited
 	set nsApp to current application's NSApplication's sharedApplication()
-	set pp to item i of rowParents
-	if pp is "" then
-		set pp to rawName
-	else
-		set pp to my lastComponent(pp)
-	end if
+	set pp to item i of rowParents -- "Studio/DAY1" with subfolders
+	if pp is "" then set pp to rawName
 	set pw to current application's NSPanel's alloc()'s initWithContentRect:{{0, 0}, {440, 380}} styleMask:1 backing:2 defer:false
 	if (count of rows) is (count of rowNames) and (count of rows) > 1 then
 		set pp to "all " & (count of rows) & " rows"
@@ -1599,12 +1923,18 @@ on releaseWindow()
 		if win is not missing value then win's setDelegate:(missing value)
 	end try
 	set {win, cbParents, formView} to {missing value, missing value, missing value}
-	set tbl to missing value
+	set {tbl, tblScroll, rowTop} to {missing value, missing value, ""}
 	set {rbAppend, rbReplace} to {missing value, missing value}
 	set {btnPaste, pastePanel, pasteView} to {missing value, missing value, missing value}
 	set {fClient, cbSub, fAllCounts, fFileName} to {missing value, missing value, missing value, missing value}
+	set fAllPrefix to missing value
+	set {pdFieldW, pdRightX} to {165, 235}
 	set {fLocation, fJob, fDateFmt, fDate, fPhotog, parentScroll, parentDoc} to {missing value, missing value, missing value, missing value, missing value, missing value, missing value}
 	set {rbSep, fFolders, cbShots, cbPrelight, fPrelight, fShotSubs} to {{}, {}, missing value, missing value, missing value, missing value}
+	try
+		if previewPanel is not missing value then previewPanel's orderOut:(missing value)
+	end try
+	set {previewPanel, fStatus} to {missing value, missing value}
 	set {pNumbering, pMode, pDigits, pNaming, pCounter, previewView, createBtn} to {missing value, missing value, missing value, missing value, missing value, missing value, missing value}
 end releaseWindow
 
@@ -1926,42 +2256,17 @@ on summaryText(sessionName, parentPath, shotNames, namingIndex, jobName, counter
 	set c to my pad(1, counterDigits)
 	set examples to {firstShot & partSep & c, jobName & partSep & c, jobName & partSep & firstShot & partSep & c, sessionName & partSep & firstShot & partSep & c, rDate & partSep & firstShot & partSep & c, sessionName & partSep & c}
 	set t to "Create session “" & sessionName & "”" & return & "in " & parentPath & return & return
-	set t to t & rawName & "/" & return
-	if prelightName is not "" then set t to t & "   " & prelightName & "/" & return
-	-- shot subfolders: the tree lists the shot folders, with their subfolders named on the same line
-	set subTail to ""
-	-- (only the shot folders of table rows with Subfolders checked have them)
-	set subFlags to {}
-	if rShotsOn is 1 and rShotSubFlags contains true and shotNames is rShotNames then
-		set shotNames to rShotBase
-		set subFlags to rShotSubFlags
-		repeat with x in rShotSubs
-			if subTail is not "" then set subTail to subTail & ", "
-			set subTail to subTail & "…" & partSep & (contents of x)
-		end repeat
-		set subTail to "with  " & subTail
-	end if
-	set allSubTail to subTail
-	-- folder tree inside RAW: each parent / subfolder on its own indented line, then the
-	-- shot folders under it as first … last (count); with shot folders off, every folder
-	set printed to {} -- parent path components already printed, by level
-	set i to 1
-	set n to count of shotNames
-	repeat while i ≤ n
-		set p to my parentOf(item i of shotNames)
-		set j to i
-		repeat while j < n
-			if my parentOf(item (j + 1) of shotNames) is not p then exit repeat
-			set j to j + 1
-		end repeat
-		-- print the parent levels that changed since the previous group
-		if p is "" then
-			set comps to {}
-		else
-			set AppleScript's text item delimiters to "/"
-			set comps to text items of p
-			set AppleScript's text item delimiters to ""
-		end if
+	-- the session folder, with RAW (and everything captured into) first
+	set t to t & sessionName & "/" & return
+	set t to t & my indent(1) & rawName & "/" & return
+	if prelightName is not "" then set t to t & my indent(2) & prelightName & "/" & return
+	-- folder tree inside RAW: every parent, subfolder, shot folder and shot subfolder on its own
+	-- indented line, each level printed once where it changes
+	set printed to {} -- path components of the previous line, by level
+	set oldTID to AppleScript's text item delimiters
+	set AppleScript's text item delimiters to "/"
+	repeat with sp in shotNames
+		set comps to text items of (contents of sp)
 		set same to true
 		repeat with k from 1 to count of comps
 			if same and k ≤ (count of printed) then
@@ -1969,65 +2274,21 @@ on summaryText(sessionName, parentPath, shotNames, namingIndex, jobName, counter
 			else
 				set same to false
 			end if
-			if not same then set t to t & my indent(k) & item k of comps & "/" & return
+			if not same then set t to t & my indent(k + 1) & item k of comps & "/" & return
 		end repeat
 		set printed to comps
-		set ind to my indent((count of comps) + 1)
-		-- shots under one parent come from one table row, so they share its Subfolders checkbox
-		set subTail to ""
-		if subFlags is not {} then
-			if item i of subFlags then set subTail to allSubTail
-		end if
-		if rShotsOn is 0 then
-			repeat with k from i to j
-				set t to t & ind & my lastComponent(item k of shotNames) & "/" & return
-			end repeat
-		else if j > i then
-			set t to t & ind & my lastComponent(item i of shotNames) & " … " & my shortLast(my lastComponent(item i of shotNames), my lastComponent(item j of shotNames)) & "   (" & (j - i + 1) & ")" & return
-			if subTail is not "" then set t to (text 1 thru -2 of t) & "   each " & subTail & return
-		else
-			set t to t & ind & my lastComponent(item i of shotNames) & return
-			if subTail is not "" then set t to (text 1 thru -2 of t) & "/   " & subTail & return
-		end if
-		set i to j + 1
 	end repeat
-	set t to t & selectsName & ",  " & outputName & ",  " & trashName
-	repeat with f in extraFolders
-		set t to t & ",  " & f
+	set AppleScript's text item delimiters to oldTID
+	-- then the other session folders, each on its own line beside RAW
+	repeat with f in {selectsName, outputName, trashName} & extraFolders
+		if (contents of f) is not "" then set t to t & my indent(1) & (contents of f) & "/" & return
 	end repeat
+	set t to text 1 thru -2 of t -- no empty line at the end
 	-- (the file name is shown large above the summary)
 	if photographer is not "" then set t to t & return & "Copyright:  " & photographer
 	if copyrightStyle is not "" then set t to t & return & "Copyright style:  " & copyrightStyle
 	return t
 end summaryText
-
--- "Job_SHOT01", "Job_SHOT15" -> "15": just the trailing number when both names share the same
--- text before it; otherwise the full last name
--- also with a pasted name after the number: "Job_SHOT01_beach" … "Job_SHOT05_pool" -> "SHOT05_pool"
-on shortLast(firstName, lastName)
-	set n1 to length of firstName
-	set n2 to length of lastName
-	-- length of the common prefix
-	set k to 0
-	repeat while k < n1 and k < n2
-		if (character (k + 1) of firstName) is not (character (k + 1) of lastName) then exit repeat
-		set k to k + 1
-	end repeat
-	-- never cut inside a number: back off to the start of its digits
-	repeat while k > 0
-		if "0123456789" does not contain (character k of lastName) then exit repeat
-		set k to k - 1
-	end repeat
-	if k = 0 or k ≥ n2 then return lastName
-	if "0123456789" does not contain (character (k + 1) of lastName) then return lastName
-	-- keep the prefix in front of the number ("SHOT05_pool", not "05_pool")
-	repeat while k > 0
-		if "_- ." contains (character k of lastName) then exit repeat
-		set k to k - 1
-	end repeat
-	if k = 0 then return lastName
-	return text (k + 1) thru -1 of lastName
-end shortLast
 
 on parentOf(relPath)
 	-- everything before the last /: "Studio/DAY1/SHOT01" -> "Studio/DAY1"
@@ -2233,42 +2494,6 @@ on sameNameWarning()
 	return "Note: more than one capture folder is named " & d & "." & return & "File names won't show which parent folder they came from," & return & "and if the counter is reset when switching folders, names will repeat." & return & fix
 end sameNameWarning
 
--- Grows or shrinks the window so the whole summary fits without scrolling (up to the
--- height of the screen); everything above the summary moves with the top edge
-on fitPreview()
-	set psv to previewView's enclosingScrollView()
-	set lm to previewView's layoutManager()
-	set tc to previewView's textContainer()
-	lm's ensureLayoutForTextContainer:tc
-	set {{ux, uy}, {uw, uh}} to lm's usedRectForTextContainer:tc
-	set needH to uh + 16 + 20 -- text inset top + bottom, room for the sideways scroller
-	if needH < 100 then set needH to 100
-	set {{px, py}, {pw, ph}} to psv's frame()
-	set delta to needH - ph
-	set {{fx, fy}, {fw, fh}} to win's frame()
-	set {{vx, vy}, {vw, vh}} to win's screen()'s visibleFrame()
-	if fh + delta > vh then set delta to vh - fh
-	if delta > -2 and delta < 2 then return
-	set cv to win's contentView()
-	cv's setAutoresizesSubviews:false
-	set newY to fy - delta
-	if newY < vy then set newY to vy
-	win's setFrame:{{fx, newY}, {fw, fh + delta}} display:false
-	repeat with sv in (cv's subviews() as list)
-		set {{sx, sy}, {sw, sh}} to sv's frame()
-		if (sv's isEqual:psv) as boolean then
-			(sv's setFrame:{{sx, sy}, {sw, sh + delta}})
-		else if (sv's isEqual:formView) as boolean then
-			(sv's setFrameOrigin:{sx, sy + delta})
-		else if sy ≥ py + ph - 1 then
-			(sv's setFrameOrigin:{sx, sy + delta})
-		end if
-	end repeat
-	cv's setAutoresizesSubviews:true
-	cv's setNeedsDisplay:true
-	my lockHeight()
-end fitPreview
-
 -- position of text in a list, case-sensitive; 0 if not there
 on posOfText(x, theList)
 	considering case
@@ -2331,12 +2556,13 @@ on digitsAt(t, i, n)
 	return s
 end digitsAt
 
--- Widens the window (evenly on both sides) when the file name doesn't fit, and narrows it
--- back to the width the user chose (640 at least) when it does; the form stays centred
+-- Widens the window (evenly on both sides) when the file name or the level 1 parents in the
+-- shots table don't fit, and narrows it back to the width the user chose (640 at least) when they do
 on fitWidth()
 	set sz to fFileName's attributedStringValue()'s |size|()
 	set needW to ((width of sz) as integer) + 60
 	if needW < userW then set needW to userW
+	if needW < tblNeedW then set needW to tblNeedW -- the level 1 parents fit in the table
 	if needW < 640 then set needW to 640
 	set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
 	set {{vx, vy}, {vw, vh}} to win's screen()'s visibleFrame()
@@ -2347,26 +2573,102 @@ on fitWidth()
 	win's setFrame:{{fx - half, fy}, {fw + half * 2, fh}} display:true
 end fitWidth
 
--- Only the width can be dragged: min and max height are the current height
+-- The window can't be made narrower than 640, nor shorter than with the table at its
+-- normal height; dragging it taller only grows the shots table (tableGrows)
 on lockHeight()
 	set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
-	win's setContentMinSize:{640, ch}
-	win's setContentMaxSize:{100000, ch}
+	set keep to tblFit -- the window can't be dragged short enough to hide a row
+	if keep > tblExtra then set keep to tblExtra
+	win's setContentMinSize:{640, ch - tblExtra + keep}
+	win's setContentMaxSize:{100000, 100000}
 end lockHeight
 
--- keeps the form exactly centred, whatever the rounding of the autoresizing
+-- Which part of the form takes a change of window height: the shots table while the user
+-- drags (true), the parent folder area when rows are added or removed (false).
+-- Everything above the growing part stays pinned to the top, everything below to the bottom.
+on tableGrows(flag)
+	if flag then
+		set {{gx, gy}, {gw, gh}} to tblScroll's frame()
+		set grower to tblScroll
+	else
+		set {{gx, gy}, {gw, gh}} to parentScroll's frame()
+		set grower to parentScroll
+	end if
+	repeat with sub in (formView's subviews() as list)
+		set {{sx, sy}, {sw, sh}} to (contents of sub)'s frame()
+		set h to ((contents of sub)'s autoresizingMask() as integer) mod 8 -- keep the horizontal part
+		if ((contents of sub)'s isEqual:grower) as boolean then
+			((contents of sub)'s setAutoresizingMask:(h + 16))
+		else if (flag and sy + sh > gy + 1) or (not flag and sy ≥ gy) then
+			((contents of sub)'s setAutoresizingMask:(h + 8)) -- beside or above it: stays at the top
+		else
+			((contents of sub)'s setAutoresizingMask:h)
+		end if
+	end repeat
+end tableGrows
+
+-- the horizontal part of a form view's autoresizing: 1 moves with the right edge, 2 stretches
+on setHMask(x, h)
+	set m to (x's autoresizingMask()) as integer
+	x's setAutoresizingMask:(m - (m mod 8) + h)
+end setHMask
+
+-- Sizes the table to show every row without scrolling, or to the height the user dragged
+-- it to when that is taller; as far as the screen allows
+on fitTable()
+	if tblScroll is missing value or win is missing value then return
+	set n to count of rowNames
+	set rowsH to n * (((tbl's rowHeight()) as real) + ((tbl's intercellSpacing())'s height as real))
+	tblScroll's tile() -- lays out header and clip view now (before the window is shown they aren't yet)
+	set {{cx, cy}, {cw, clipH}} to tblScroll's contentView()'s frame()
+	set {{sx, sy}, {sw, svH}} to tblScroll's frame()
+	-- the frame the rows need: their height plus the header and border around them
+	-- (the clip view may still cover the header area before the window is on screen)
+	set {{hx, hy}, {hw, headerH}} to tbl's headerView()'s frame()
+	set chrome to svH - clipH
+	if chrome < headerH + 2 then set chrome to headerH + 2
+	set tblFit to ((rowsH + chrome - tblBase) + 0.999) div 1
+	if tblFit < 0 then set tblFit to 0
+	set target to tblUser
+	if tblFit > target then set target to tblFit
+	my setTableExtra(target)
+end fitTable
+
+-- makes the table target taller than tblBase, growing or shrinking the window below its top edge
+on setTableExtra(target)
+	set d to target - tblExtra
+	set {{fx, fy}, {fw, fh}} to win's frame()
+	set {{vx, vy}, {vw, vh}} to win's screen()'s visibleFrame()
+	if d > 0 and fh + d > vh then set d to (vh - fh) as integer -- no room: the table scrolls
+	if d is 0 then
+		my lockHeight()
+		return
+	end if
+	set newY to fy - d
+	if newY < vy then set newY to vy
+	my tableGrows(true)
+	win's setFrame:{{fx, newY}, {fw, fh + d}} display:true
+	my tableGrows(false)
+	set tblExtra to tblExtra + d
+	my lockHeight()
+end setTableExtra
+
 -- Dragging either side edge widens or narrows the window on both sides at once
 on windowWillStartLiveResize:aNotification
 	set mx to (x of (current application's NSEvent's mouseLocation())) as real
 	set {{fx, fy}, {fw, fh}} to win's frame()
-	set edgeSign to 1
-	if mx < fx + fw / 2 then set edgeSign to -1 -- the left edge
+	set edgeSign to 0 -- top or bottom edge: only the height changes
+	if mx < fx + 12 then set edgeSign to -1 -- the left edge (or a left corner)
+	if mx > fx + fw - 12 then set edgeSign to 1 -- the right edge
 	set dragStart to {mx, fx as real, fw as real, edgeSign}
+	set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
+	set dragStartH to ch
+	my tableGrows(true)
 end windowWillStartLiveResize:
 
 on windowDidResize:aNotification
 	if formView is missing value then return
-	if dragStart is not missing value and not inSymResize and (win's inLiveResize()) as boolean then
+	if dragStart is not missing value and item 4 of dragStart is not 0 and not inSymResize and (win's inLiveResize()) as boolean then
 		-- the new width comes from the mouse alone, so AppKit's own frame each step doesn't add up
 		set {mx0, fx0, fw0, edgeSign} to dragStart
 		set mx to (x of (current application's NSEvent's mouseLocation())) as real
@@ -2383,15 +2685,28 @@ on windowDidResize:aNotification
 		win's setFrame:{{newX, fy}, {newW, fh}} display:true
 		set inSymResize to false
 	end if
-	set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
-	set {{sx, sy}, {sw, sh}} to formView's frame()
-	formView's setFrameOrigin:{((cw - sw) div 2), sy}
+	my layoutParentDoc()
+	my layoutFolders()
+	-- the table is wider or narrower: refit its columns (not while a cell is being typed in)
+	if tbl is not missing value then
+		if (tbl's editedRow()) as integer < 0 then my sizeColumns()
+	end if
 end windowDidResize:
 
 -- a width dragged by hand is kept for the rest of this run and the next ones
 on windowDidEndLiveResize:aNotification
 	set dragStart to missing value
+	my tableGrows(false)
+	set {{tx, ty}, {tw, tblH}} to tblScroll's frame()
+	set tblExtra to (tblH - tblBase) as integer
+	if tblExtra < 0 then set tblExtra to 0
 	set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
+	if ch is not dragStartH then
+		-- dragged taller than the rows need: kept; down to the rows: the table follows them again
+		set tblUser to tblExtra
+		if tblUser ≤ tblFit then set tblUser to 0
+		my writePref("tableextra", tblUser)
+	end if
 	set userW to cw as integer
 	my writePref("winwidth", userW)
 	my fitWidth() -- a file name wider than the chosen width still fits

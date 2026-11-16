@@ -96,7 +96,7 @@ The window works from top to bottom, and the preview updates as you type. Hover 
 3. **Date format and separators.** Set how the date is written (for example `YYYY-MM-DD` or `YYMMDD`) and which characters join the parts of each name.
 4. **Prelight folder.** If you turn it on, a folder is created inside RAW and used as the first capture folder.
 5. **Parent folders.** Add groups such as days, locations or collections. Turn on **Subfolders** to add a second level inside each one, for example `Studio/DAY1`.
-6. **Shot folders.** Each row in the table is one group of shots. Click a cell to change its shot prefix or its number of shots. Type a number in **#** to use it for every row.
+6. **Shot folders.** Each row in the table is one group of shots. Click a cell to change its shot prefix or its number of shots. Type a number in **Global #:** to use it for every row. Type a prefix in **Global prefix:** to use it for every row whose prefix you haven't typed in the table; clear a row's prefix to make it follow **Global prefix:** again. With Subfolders on, there is one row per parent and subfolder pair (`Studio/DAY1`, `Studio/DAY2`, `Rooftop/DAY1`…), shown in the **Parent** and **Subfolder** columns. Click either header to group the rows by it. The table grows to show every row without scrolling; drag the window's bottom edge to make it taller still (remembered).
 7. **Pasted lists.** Select one or more rows (⌘A selects all), then click **Paste list…** or the row's **List** cell. Paste one name per line and press ⌘Return. The number of names sets the number of shots for that row. **Remove list** goes back to plain numbering. Choose how the names are used:
    - **Append** keeps the number and adds the name: `SHOT01_NL4102`
    - **Replace** uses the name as the folder: `NL4102`
@@ -104,7 +104,7 @@ The window works from top to bottom, and the preview updates as you type. Hover 
 9. **Shot folder count.** Choose whether numbering restarts in each parent folder, continues per shot prefix, or continues across all parent folders.
 10. **Shot folder naming and capture file naming.** Choose what each shot folder and capture file is called, and how many digits the numbers have.
    With **Shot folders** off and **Subfolders** on, you capture straight into the subfolders. Shot folder naming then picks their names: **subfolder** gives `KV1/main`, **parent_subfolder** gives `KV1/KV1_main`. Capture One can only put the folder you capture into in the file name, so use parent_subfolder to get `KV1` into the file name too.
-11. **Check the preview.** The folder tree, a sample file name and any problems, such as a folder that already exists, appear before anything is created. Click **Create Session** to build it.
+11. **Check the preview.** A sample file name and any problems, such as a folder that already exists, appear above the buttons. Click **Preview file tree…** (⌘P) to see the whole folder tree in its own window, which follows your edits. Click **Create Session** to build it.
 
 ## Updating
 
