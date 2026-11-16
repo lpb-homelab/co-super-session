@@ -2,6 +2,10 @@
 
 All notable changes to CO SuperSession are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+- A note now warns whenever the shot folder naming leaves the parent folder out of the file names (shot, job_shot, date_job_shot, subfolder), not only when two capture folders share a name
+
 ## v0.3.0 – 2026-11-16
 
 - Shot folder table: click the Parent or Subfolder header to group the rows by that column (remembered); folders are still created and numbered in parent order

@@ -151,6 +151,7 @@ property rDigits : 2
 property rCounter : 4
 property rNumbering : 1
 property rMode : 1
+property rParentLost : false -- there are parent folders, but the capture folder names leave them out
 property rNaming : 1
 
 on run
@@ -898,6 +899,9 @@ on refreshBody()
 	end if
 	my fillPopup(pMode, labels, my posOf(rMode, ids))
 	pMode's setEnabled:(ng > 0 or leafNaming)
+	-- shot, job_shot, date_job_shot and subfolder leave the parent out of the capture folder
+	-- name, and Capture One's file naming only sees that name
+	set rParentLost to ((ng > 0 and n > 0 and rMode is in {1, 2, 6}) or (leafNaming and rMode is 7))
 	pDigits's setEnabled:(ng > 0)
 
 	if ng > 0 then
@@ -2482,15 +2486,17 @@ on sameNameWarning()
 			end if
 		end considering
 	end repeat
-	if dupes is {} then return ""
-	set AppleScript's text item delimiters to ", "
-	set d to dupes as text
-	set AppleScript's text item delimiters to ""
+	if dupes is {} and not rParentLost then return ""
 	if rShotsOn is 0 then
 		set fix to "To fix: set Shot folder naming to parent_subfolder."
 	else
 		set fix to "To fix: pick a Shot folder naming with parent in it."
 	end if
+	-- unique folder names still lose the parent: SHOT01 doesn't say it was shot in Studio
+	if dupes is {} then return "Note: the capture folder names leave out the parent folder." & return & "File names won't show which parent folder they came from." & return & fix
+	set AppleScript's text item delimiters to ", "
+	set d to dupes as text
+	set AppleScript's text item delimiters to ""
 	return "Note: more than one capture folder is named " & d & "." & return & "File names won't show which parent folder they came from," & return & "and if the counter is reset when switching folders, names will repeat." & return & fix
 end sameNameWarning
 
