@@ -90,8 +90,8 @@ property userW : 640 -- window width the user dragged to (remembered between run
 property dragStart : missing value -- {mouse x, frame x, frame width, edge sign} while the user drags an edge
 property inSymResize : false -- guards windowDidResize against its own setFrame
 
--- separators: 1 ISO 8601 (dates with -, parts joined with _, spaces in names become -),
--- 2 all dashes, 3 all underscores, 4 the opposite of ISO 8601 (a joke: _ in dates and names, - between parts)
+-- separators: 1 standard (ISO 8601 dates with -, parts joined with _, spaces in names become -),
+-- 2 all dashes, 3 all underscores, 4 the opposite of standard (a joke: _ in dates and names, - between parts)
 property sepStyle : 1
 property partSep : "_" -- between date, job, parent, shot, counter
 property innerSep : "-" -- replaces spaces inside a name
@@ -348,7 +348,7 @@ on buildWindow()
 	set y to my nextRow(24)
 	my addLabel(v, "Separator logic:", y)
 	set rbSep to {}
-	set sepTitles to {"ISO 8601", "All dashes", "All underscores", "ISO 8601"}
+	set sepTitles to {"Standard", "All dashes", "All underscores", "Standard"}
 	repeat with i from 1 to 4
 		set rb to (current application's NSButton's radioButtonWithTitle:(item i of sepTitles) target:me action:"sepChanged:")
 		(rb's setFrame:{{item i of {165, 265, 370, 505}, y + 1}, {item i of {95, 100, 130, 110}, 22}})
@@ -1041,7 +1041,7 @@ on updateSepTips()
 	repeat with s from 1 to 4
 		my setSeparators(s)
 		set t to my dashOnly(my formatToday("YYYY-MM-DD")) & partSep & "client" & partSep & my spacesToDashes("job name") & partSep & "DAY01" & partSep & "SHOT01" & partSep & "0001"
-		set t to t & linefeed & item s of {"By the book.", "At least you're consistent.", "Acceptable.", "Yes, I am judging you."}
+		set t to t & linefeed & item s of {"ISO 8601 for dates" & linefeed & "_ separates parts" & linefeed & "- joins words", "At least you're consistent.", "Acceptable.", "Yes, I am judging you."}
 		-- keep it on one line: macOS wraps tooltips at spaces and hyphens, so use the
 		-- non-breaking versions (they look the same)
 		set t to my replaceText(my replaceText(t, space, character id 160), "-", character id 8209)
