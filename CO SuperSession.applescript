@@ -92,8 +92,9 @@ property rbSep : {} -- separator radio buttons
 property previewView : missing value -- the folder tree, in the Preview window
 property previewPanel : missing value -- the Preview window (opened with Preview file tree…)
 property fStatus : missing value -- problems and notes, above the buttons
-property fShotName : missing value -- the resulting shot folder name, above the file name
+property fShotName : missing value -- the capture folder name, above the file name
 property fFileName : missing value -- the resulting file name, shown large above the summary
+property previewIdx : 1 -- which capture folder the shot folder and file names show (click them for the next)
 property formView : missing value -- the form; its wide fields and the shots table stretch with the window
 property userW : 640 -- window width the user dragged to (remembered between runs)
 property dragStart : missing value -- {mouse x, frame x, frame width, edge sign} while the user drags an edge
@@ -602,9 +603,9 @@ on buildWindow()
 	-- the end result: what the files will be called
 	set v to cv
 	set cursorTop to cursorTop + 14 -- breathing room below the popups
-	-- the shot folder name, then the file name, each with a small caption
+	-- the capture folder name, then the file name, each with a small caption
 	set y to my nextRow(14)
-	set cap to my addLabelAt(v, "Shot folder name:", 20, y - 3, 600)
+	set cap to my addLabelAt(v, "Capture folder name:", 20, y - 3, 600)
 	cap's setFont:(current application's NSFont's systemFontOfSize:11)
 	cap's setTextColor:(current application's NSColor's secondaryLabelColor())
 	cap's setAlignment:(current application's NSTextAlignmentCenter)
@@ -616,8 +617,8 @@ on buildWindow()
 	fShotName's setAlignment:(current application's NSTextAlignmentCenter)
 	fShotName's setFont:(current application's NSFont's monospacedSystemFontOfSize:15 weight:0.4)
 	fShotName's setTextColor:(current application's NSColor's controlAccentColor())
-	fShotName's setSelectable:true
 	fShotName's setLineBreakMode:5
+	my addPreviewClick(fShotName)
 	v's addSubview:fShotName
 	set y to my nextRow(14)
 	set cap to my addLabelAt(v, "File name:", 20, y - 3, 600)
@@ -632,8 +633,8 @@ on buildWindow()
 	fFileName's setAlignment:(current application's NSTextAlignmentCenter)
 	fFileName's setFont:(current application's NSFont's monospacedSystemFontOfSize:17 weight:0.4)
 	fFileName's setTextColor:(current application's NSColor's controlAccentColor())
-	fFileName's setSelectable:true
 	fFileName's setLineBreakMode:5
+	my addPreviewClick(fFileName)
 	v's addSubview:fFileName
 
 	-- the whole folder tree opens in its own window
@@ -1133,20 +1134,8 @@ on refreshBody()
 		set rCaptureFormat to "[Name]" & partSep & "[Destination Folder Name]" & partSep & cnt
 	end if
 
-	-- the file name, large: first capture in the first shot folder
-	if rShotNames is {} then
-		set ffShot to rawName
-	else
-		set ffShot to my lastComponent(item 1 of rShotNames)
-	end if
-	set ffName to ffShot & partSep & my pad(1, rCounter)
-	if rFileMode is 1 then set ffName to my pad(1, rCounter)
-	if rCaptureName is not "" then set ffName to rCaptureName & partSep & ffName
-	fShotName's setStringValue:ffShot
-	fShotName's setToolTip:ffShot
-	fFileName's setStringValue:ffName
-	fFileName's setToolTip:ffName
-	my fitWidth()
+	-- the capture folder and file name, large: first capture in one capture folder
+	my showPreviewName()
 
 	if problem is "" then
 		my setPreviewWrap(false)
@@ -2233,6 +2222,7 @@ on releaseWindow()
 	set {previewPanel, fStatus} to {missing value, missing value}
 	set {pNumbering, pFolderMode, pDigits, pCounter, previewView, createBtn} to {missing value, missing value, missing value, missing value, missing value, missing value}
 	set {cbFolderJob, cbFolderDate, pFileMode, fFilePrefix} to {missing value, missing value, missing value, missing value}
+	set previewIdx to 1
 end releaseWindow
 
 ---------- WINDOW HELPERS ----------
@@ -2956,6 +2946,48 @@ on digitsAt(t, i, n)
 	end repeat
 	return s
 end digitsAt
+
+-- Clicking the shot folder or file name moves them on to the next capture folder
+on addPreviewClick(f)
+	set g to current application's NSClickGestureRecognizer's alloc()'s initWithTarget:me action:"previewNameClicked:"
+	f's addGestureRecognizer:g
+	f's setToolTip:"Click to see the next capture folder"
+end addPreviewClick
+
+on previewNameClicked:sender
+	set previewIdx to previewIdx + 1
+	my showPreviewName()
+end previewNameClicked:
+
+-- The capture folders in order: the shot folders (or level folders, or RAW itself), then prelight
+on previewFolders()
+	if rShotNames is {} then
+		set L to {rawName}
+	else
+		set L to {}
+		repeat with x in rShotNames
+			set end of L to my lastComponent(contents of x)
+		end repeat
+	end if
+	if prelightName is not "" then set end of L to prelightName
+	return L
+end previewFolders
+
+-- Shows the first capture's name in capture folder previewIdx (back to the first past the last)
+on showPreviewName()
+	set L to my previewFolders()
+	if previewIdx > (count of L) or previewIdx < 1 then set previewIdx to 1
+	set ffShot to item previewIdx of L
+	set ffName to ffShot & partSep & my pad(1, rCounter)
+	if rFileMode is 1 then set ffName to my pad(1, rCounter)
+	if rCaptureName is not "" then set ffName to rCaptureName & partSep & ffName
+	set tip to linefeed & "Capture folder " & previewIdx & " of " & (count of L) & ". Click to see the next one."
+	fShotName's setStringValue:ffShot
+	fShotName's setToolTip:(ffShot & tip)
+	fFileName's setStringValue:ffName
+	fFileName's setToolTip:(ffName & tip)
+	my fitWidth()
+end showPreviewName
 
 -- Widens the window (evenly on both sides) when the file name or the level 1 folders in the
 -- shots table don't fit, and narrows it back to the width the user chose (640 at least) when they do
