@@ -6,6 +6,7 @@ All notable changes to CO SuperSession are listed here. Versions follow [Semanti
 
 - The shot folder table is remembered: each row's prefix, shots, pasted list and Subfolders checkbox come back the next time for the same level folders
 - Shots per folder (all rows) and Shot folder prefix (all rows) now remember their own values, not those of the last table row
+- Shot folder table: new Custom subfolders column; click it to paste a row's own subfolders, one per line (select several rows to give them all the same). They are added inside each of its shot folders, on top of the Shot subfolders, and are remembered with the row
 
 ## v0.3.1 – 2026-11-19
 

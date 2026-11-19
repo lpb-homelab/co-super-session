@@ -10,7 +10,7 @@ Starting a shoot in Capture One usually means creating the session, renaming its
 
 - Names the session from the date, client and job, for example `2026-11-14_LUMARA_Night-Glow`
 - Creates your own folder layout (RAW, selects, output, trash, documents) and points Capture One at it
-- Builds capture folders for the shoot: a prelight folder, groups such as days or locations, and numbered shot folders
+- Builds the folders for the shoot: a prelight folder, level folders such as days or locations, numbered shot folders and shot subfolders
 - Takes a pasted list of names, such as SKUs, looks or talent, one per line, so each shot folder carries its own name. It warns you if two folders would end up with the same name
 - Sets the capture file naming so every image carries the job and shot it belongs to
 - Adds the photographer's copyright to every capture
@@ -96,6 +96,13 @@ A capture in the close subfolder of the second Ember look could then be named `H
 
 When the session is ready, Capture One opens on the first capture folder.
 
+## Folder terms
+
+- **Level 1 and level 2 folders**: the groups you type, such as days, locations or collections. Level 2 folders sit inside each level 1 folder.
+- **Shot folder**: any folder directly inside the last level folder (level 2 if used, otherwise level 1), or directly inside RAW when there are no level folders. `L01`, `KV03` and `SHOT01_NL4102` are shot folders.
+- **Shot subfolder**: a folder inside a shot folder, from Shot subfolders or Custom subfolders (`KV1/KV1_plates`).
+- **Capture folder**: any folder at the deepest level inside RAW, the folder you actually capture into. That is a shot subfolder where a shot folder has them, otherwise the shot folder itself, the last level folder with Shot folders off, or the prelight folder.
+
 ## Design requirements
 
 These are the rules the script is built to keep. New features have to keep them too.
@@ -150,7 +157,7 @@ The window works from top to bottom, and the preview updates as you type. Hover 
 7. **Pasted lists.** Select one or more rows (⌘A selects all), then click **Paste list…** or the row's **List** cell. Paste one name per line and press ⌘Return. The number of names sets the number of shots for that row. **Remove list** goes back to plain numbering. Choose how the names are used:
    - **Append** keeps the number and adds the name: `SHOT01_NL4102`
    - **Replace** uses the name as the folder: `NL4102`
-8. **Shot subfolders.** Optional. Type a short list such as `main, plates` or `full, medium, close` to get those folders inside every shot folder. They are not numbered, and each is named after its shot (`SHOT01/SHOT01_main`), so the shot stays in the capture file name. Only table rows with **Subfolders** checked get them; untick a row to keep its shot folders plain.
+8. **Shot subfolders.** Optional. Type a short list such as `main, plates` or `full, medium, close` to get those folders inside every shot folder. They are not numbered, and each is named after its shot (`SHOT01/SHOT01_main`), so the shot stays in the capture file name. Only table rows with **Subfolders** checked get them; untick a row to keep its shot folders plain. To give a row extra subfolders of its own, click its **Custom subfolders** cell and paste them, one per line (select several rows first to give them all the same list); they are added to that row's shot folders on top of the shot subfolders, and work even with Subfolders unticked.
 9. **Shot folder count.** Choose whether numbering restarts in each folder, continues per shot prefix, or continues across all folders.
 10. **Folder naming.** Choose how much of the folders above it each folder name repeats:
    - **Simple**: plain names: `NORDLYS/LOOKBOOK/L01`

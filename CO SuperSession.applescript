@@ -3,6 +3,8 @@
 --   00_RAW/_prelight (first capture folder), optional level folders (location, day,
 --   scene, category) with numbered shot folders, 01_SELECTS, 02_OUTPUT, 03_TRASH, 04_DOCS.
 -- Sets capture/selects/output/trash, capture file naming and optionally a copyright style.
+-- Terms: a shot folder is any folder directly inside the last level folder (or RAW without
+-- levels); a capture folder is any deepest-level folder inside RAW (rShotNames, plus prelight).
 -- Edit THIS file only. Build and install with ./install.sh.
 --
 -- Copyright (C) 2026 Louis-Philippe Beauduin
@@ -122,12 +124,14 @@ property rowNames : {}
 property rowCounts : {}
 property rowLists : {} -- pasted folder names per table row ({} = none)
 property rowSubs : {} -- Subfolders checkbox per table row: true = its shots get the shot subfolders
-property savedRows : {} -- the table rows saved last time: {level path, prefix, shots, own prefix, subfolders, list}
+property rowExtra : {} -- Custom subfolders per table row: the pasted lines, added to the shot subfolders ({} = none)
+property savedRows : {} -- the table rows saved last time: {level path, prefix, shots, own prefix, subfolders, list, custom subfolders}
 property rAllPrefix : "" -- the "all rows" prefix and number of shots, read when the window closes
 property rAllCount : ""
 property rGroupSubs : {} -- the Subfolders checkbox of each shot group, parallel to rGroups
+property rGroupExtra : {} -- the cleaned Custom subfolders of each shot group, parallel to rGroups
 property rShotBase : {} -- the shot folders before their subfolders were added
-property rShotSubFlags : {} -- per shot folder in rShotBase: true = it has the shot subfolders
+property rShotSubFlags : {} -- per shot folder in rShotBase: the subfolders it gets ({} = none)
 property rGroupLists : {} -- the pasted names of each shot group, parallel to rGroups
 property rAppend : true -- true: SHOT01_name; false: the pasted names replace prefix + number
 property rbAppend : missing value -- pasted names: Append (SHOT01_name) or Replace (name)
@@ -193,6 +197,7 @@ on main()
 	set rowCounts to {}
 	set rowLists to {}
 	set rowSubs to {}
+	set rowExtra to {}
 	set rowOwnName to {}
 	set savedRows to my readSavedRows()
 	set modalCode to 0
@@ -521,6 +526,14 @@ on buildWindow()
 	chk's setControlSize:1
 	col's setDataCell:chk
 	col's setHeaderToolTip:"Checked rows get the Shot subfolders inside each of their shot folders"
+	tbl's addTableColumn:col
+	-- Custom subfolders: this row's own subfolders, added to the Shot subfolders
+	set col to current application's NSTableColumn's alloc()'s initWithIdentifier:"extra"
+	col's headerCell()'s setStringValue:"Custom subfolders"
+	col's setWidth:120
+	col's setEditable:false
+	col's dataCell()'s setLineBreakMode:4
+	col's setHeaderToolTip:"Click to paste this row's own subfolders, one per line (select several rows to give them all the same)." & linefeed & "They go inside each of its shot folders, added to the Shot subfolders."
 	tbl's addTableColumn:col
 	tbl's setAllowsColumnReordering:false
 	tbl's setAllowsColumnSelection:false -- a header click sorts (Level 1, Level 2) instead
@@ -852,6 +865,7 @@ on refreshBody()
 	set rGroups to {}
 	set rGroupLists to {}
 	set rGroupSubs to {}
+	set rGroupExtra to {}
 	set rAppend to ((rbAppend's state()) as integer is 1)
 	set shotsOn to ((cbShots's state()) as integer is 1)
 	if shotsOn then
@@ -898,6 +912,7 @@ on refreshBody()
 			set rGroups to {{"", nm, c}}
 			set rGroupLists to {L}
 			set rGroupSubs to {my rowHasSubs(1)}
+			set rGroupExtra to {my rowExtraList(1, "")}
 		end if
 	else
 		-- one table row per level path (with level 2: per level 1 and level 2 pair)
@@ -916,6 +931,7 @@ on refreshBody()
 				set end of rGroups to {p, nm, c}
 				set end of rGroupLists to L
 				set end of rGroupSubs to my rowHasSubs(r)
+				set end of rGroupExtra to my rowExtraList(r, p & ": ")
 			end if
 		end repeat
 	end if
@@ -1013,20 +1029,28 @@ on refreshBody()
 		end repeat
 		-- shot subfolders: SHOT01/SHOT01_main, SHOT01/SHOT01_plates. Capture One only puts the
 		-- folder captured into in the file name, so each subfolder carries its shot folder's name
-		-- Only the rows with Subfolders checked get them; each group made as many folders as its count
+		-- Only the rows with Subfolders checked get them, plus each row's Custom subfolders;
+		-- each group made as many folders as its count
 		set rShotBase to rShotNames
 		set rShotSubFlags to {}
+		set anySubs to false
 		repeat with gi from 1 to ng
+			set gSubs to {}
+			if item gi of rGroupSubs then set gSubs to rShotSubs
+			repeat with x in item gi of rGroupExtra
+				if {contents of x} is not in gSubs then set gSubs to gSubs & {contents of x}
+			end repeat
+			if gSubs is not {} then set anySubs to true
 			repeat (item 3 of item gi of rGroups) times
-				set end of rShotSubFlags to (rShotSubs is not {} and item gi of rGroupSubs)
+				set end of rShotSubFlags to gSubs
 			end repeat
 		end repeat
-		if rShotSubFlags contains true and (count of rShotSubFlags) is (count of rShotNames) then
+		if anySubs and (count of rShotSubFlags) is (count of rShotNames) then
 			set subPaths to {}
 			repeat with i from 1 to count of rShotNames
 				set x to item i of rShotNames
-				if item i of rShotSubFlags then
-					repeat with sName in rShotSubs
+				if item i of rShotSubFlags is not {} then
+					repeat with sName in item i of rShotSubFlags
 						set end of subPaths to x & "/" & my lastComponent(x) & partSep & (contents of sName)
 					end repeat
 				else
@@ -1507,6 +1531,7 @@ on syncRows()
 	set newCounts to {}
 	set newLists to {}
 	set newSubs to {}
+	set newExtra to {}
 	set newOwn to {}
 	-- each row keeps the data of the old row with the same level folder, so removing a level folder
 	-- doesn't hand its prefix and pasted list to the next one. src: old row per new row, 0 = new
@@ -1532,6 +1557,7 @@ on syncRows()
 		-- a pasted list belongs to its row only; new rows start without one, Subfolders checked
 		if r > 0 then
 			set end of newSubs to my rowHasSubs(r)
+			set end of newExtra to my rowExtraItems(r)
 			set end of newOwn to my rowIsOwn(r)
 			if r ≤ (count of rowLists) then
 				set end of newLists to item r of rowLists
@@ -1543,14 +1569,16 @@ on syncRows()
 		else
 			set sv to my savedRowFor(item i of names)
 			if sv is not missing value then
-				-- a row of the last session: its prefix, shots, list and Subfolders come back as they were
-				set {x, nm, c, ownB, subsB, L} to sv
+				-- a row of the last session: its prefix, shots, list and subfolders come back as they were
+				set {x, nm, c, ownB, subsB, L, ex} to sv
 				set end of newSubs to subsB
+				set end of newExtra to ex
 				set end of newOwn to ownB
 				set end of newLists to L
 				set r to -1 -- so the global prefix and number don't replace them
 			else
 				set end of newSubs to true
+				set end of newExtra to {}
 				set end of newOwn to false
 				set end of newLists to {}
 				if i > 1 then
@@ -1582,6 +1610,7 @@ on syncRows()
 	set rowCounts to newCounts
 	set rowLists to newLists
 	set rowSubs to newSubs
+	set rowExtra to newExtra
 	set rowOwnName to newOwn
 	tbl's reloadData()
 	my fitTable() -- taller or shorter, so every row shows
@@ -1675,7 +1704,7 @@ on rowIsOwn(i)
 end rowIsOwn
 
 -- The table rows as one pref: a line per row, tab between its fields
--- (level path, prefix, shots, own prefix 1/0, subfolders 1/0, list), the list's names joined by
+-- (level path, prefix, shots, own prefix 1/0, subfolders 1/0, list, custom subfolders), the list's names joined by
 -- character id 31; folder names come from single-line fields, so none of these can be in them
 on rowsText()
 	set us to character id 31
@@ -1686,7 +1715,8 @@ on rowsText()
 		if i ≤ (count of rowLists) then set L to item i of rowLists
 		set AppleScript's text item delimiters to us
 		set lt to L as text
-		set f to {item i of rowLevelPaths, item i of rowNames, item i of rowCounts, my boolText(my rowIsOwn(i)), my boolText(my rowHasSubs(i)), lt}
+		set ex to my rowExtraItems(i) as text
+		set f to {item i of rowLevelPaths, item i of rowNames, item i of rowCounts, my boolText(my rowIsOwn(i)), my boolText(my rowHasSubs(i)), lt, ex}
 		set AppleScript's text item delimiters to tab
 		set end of lines_ to f as text
 	end repeat
@@ -1705,11 +1735,14 @@ on readSavedRows()
 		repeat with ln in lines_
 			set AppleScript's text item delimiters to tab
 			set f to text items of (contents of ln)
-			if (count of f) is 6 then
+			-- 6 fields: saved before the Custom subfolders column
+			if (count of f) is 6 or (count of f) is 7 then
 				set AppleScript's text item delimiters to character id 31
+				set ex to {}
+				if (count of f) is 7 and item 7 of f is not "" then set ex to text items of (item 7 of f)
 				set L to {}
 				if item 6 of f is not "" then set L to text items of (item 6 of f)
-				set end of out to {item 1 of f, item 2 of f, item 3 of f, (item 4 of f is "1"), (item 5 of f is "1"), L}
+				set end of out to {item 1 of f, item 2 of f, item 3 of f, (item 4 of f is "1"), (item 5 of f is "1"), L, ex}
 			end if
 		end repeat
 	end try
@@ -1732,6 +1765,32 @@ on rowHasSubs(i)
 	if i > (count of rowSubs) then return true
 	return item i of rowSubs
 end rowHasSubs
+
+-- the Custom subfolders of table row i as pasted, one item per line ({} = none)
+on rowExtraItems(i)
+	if i > (count of rowExtra) then return {}
+	return item i of rowExtra
+end rowExtraItems
+
+-- the Custom subfolders of table row i as clean folder names, without repeats; a line may also
+-- hold several names separated by commas. A bad name is a problem (not reported with label missing value)
+on rowExtraList(i, label)
+	set out to {}
+	set L to my rowExtraItems(i)
+	if L is {} then return out
+	set oldTID to AppleScript's text item delimiters
+	set AppleScript's text item delimiters to ","
+	set t to L as text
+	set AppleScript's text item delimiters to oldTID
+	try
+		repeat with x in my splitList(t)
+			if {contents of x} is not in out then set end of out to contents of x
+		end repeat
+	on error
+		if label is not missing value then my addProblem(label & "please don't use / or : in custom subfolder names.")
+	end try
+	return out
+end rowExtraList
 
 ---------- WINDOW EVENTS ----------
 on controlTextDidChange:aNotification
@@ -1829,24 +1888,24 @@ on tableClicked:sender
 	if (flags div 1048576) mod 2 is 1 or (flags div 131072) mod 2 is 1 then return
 	set col to item (c + 1) of (tbl's tableColumns() as list)
 	if (col's identifier()) as text is "subs" then return -- the checkbox handles its own click
-	if (col's identifier()) as text is "list" then
+	if (col's identifier()) as text is in {"list", "extra"} then
 		-- a click inside a multiple selection pastes into all of it
 		set rows to my selectedRows()
 		if (r + 1) is not in rows then set rows to {r + 1}
-		my openPaste(rows)
+		my openPaste(rows, (col's identifier()) as text)
 	else if (col's identifier()) as text is not in {"level1", "level2"} and my canEdit(col, r + 1) then
 		tbl's editColumn:c row:r withEvent:(missing value) |select|:true
 	end if
 end tableClicked:
 
--- Fits the level folder columns, Shots and List to their widest text; Shot folder prefix gets the rest of the width
+-- Fits the level folder columns, Shots, List and Custom subfolders to their widest text; Shot folder prefix gets the rest of the width
 on sizeColumns()
 	set cols to tbl's tableColumns() as list
 	set avail to ((tbl's enclosingScrollView()'s contentSize())'s width) as real
 	set gap to ((tbl's intercellSpacing())'s width) as real
 	set level1On to (rowLevel1 is not "")
 	set wants to {}
-	repeat with col in items 1 thru 5 of cols
+	repeat with col in (items 1 thru 5 of cols) & {item 7 of cols}
 		set f to (col's dataCell()'s |font|())
 		set attrs to (current application's NSDictionary's dictionaryWithObject:f forKey:(current application's NSFontAttributeName))
 		set w to ((((current application's NSString's stringWithString:((col's headerCell()'s stringValue()) as text))'s sizeWithAttributes:attrs)'s width) as real) + 12
@@ -1859,13 +1918,14 @@ on sizeColumns()
 		end repeat
 		set end of wants to w
 	end repeat
-	set {wT, wP, wN, wC, wL} to wants
+	set {wT, wP, wN, wC, wL, wX} to wants
 	set wC to my clampInt(wC, 50, 90)
 	set wL to my clampInt(wL, 60, 100)
 	set wS to 75 -- Subfolders: fixed, fits its header
-	set nGaps to 5
-	if level1On then set nGaps to 6
-	set spare to avail - wC - wL - wS - nGaps * gap
+	set wX to my clampInt(wX, 100, 160)
+	set nGaps to 6
+	if level1On then set nGaps to 7
+	set spare to avail - wC - wL - wS - wX - nGaps * gap
 	-- the window width at which the level 1 folders (up to 300) fit beside a 120 prefix
 	set tblNeedW to 0
 	if level1On then
@@ -1891,8 +1951,8 @@ on sizeColumns()
 		if wP < 70 then set wP to 70
 	end if
 	set wN to spare - wP - wT
-	repeat with k from 1 to 6
-		((item k of cols)'s setWidth:(item k of {wT, wP, wN, wC, wL, wS}))
+	repeat with k from 1 to 7
+		((item k of cols)'s setWidth:(item k of {wT, wP, wN, wC, wL, wS, wX}))
 	end repeat
 end sizeColumns
 
@@ -1944,6 +2004,14 @@ on tableView:tv objectValueForTableColumn:col row:r
 	else if cid is "subs" then
 		if my rowHasSubs(i) then return 1
 		return 0
+	else if cid is "extra" then
+		set ex to my rowExtraList(i, missing value)
+		if ex is {} then return "–"
+		set oldTID to AppleScript's text item delimiters
+		set AppleScript's text item delimiters to ", "
+		set t to ex as text
+		set AppleScript's text item delimiters to oldTID
+		return t
 	end if
 	set L to {}
 	if i ≤ (count of rowLists) then set L to my cleanList(item i of rowLists)
@@ -1991,7 +2059,7 @@ end tableView:setObjectValue:forTableColumn:row:
 
 ---------- PASTE LIST ----------
 on pasteList:sender
-	my openPaste(my selectedRows())
+	my openPaste(my selectedRows(), "list")
 end pasteList:
 
 -- selected table rows, 1-based
@@ -2004,15 +2072,24 @@ on selectedRows()
 	return out
 end selectedRows
 
--- A small window on top: one folder name per line, for one or more table rows
-on openPaste(rows)
+-- A small window on top: one folder name per line, for one or more table rows.
+-- kind "list": the row's shot folder names; "extra": its Custom subfolders
+on openPaste(rows, kind)
 	if rows is {} then return
 	if (cbShots's state()) as integer is not 1 then return
 	set i to item 1 of rows
 	if i > (count of rowNames) then return
+	set isExtra to (kind is "extra")
+	repeat while (count of rowExtra) < (count of rowNames)
+		set end of rowExtra to {}
+	end repeat
 	set anyList to false
 	repeat with k in rows
-		if item k of rowLists is not {} then set anyList to true
+		if isExtra then
+			if item k of rowExtra is not {} then set anyList to true
+		else
+			if item k of rowLists is not {} then set anyList to true
+		end if
 	end repeat
 	win's makeFirstResponder:(missing value) -- commits a table cell still being edited
 	set nsApp to current application's NSApplication's sharedApplication()
@@ -2024,12 +2101,20 @@ on openPaste(rows)
 	else if (count of rows) > 1 then
 		set pp to (count of rows) & " rows"
 	end if
-	pw's setTitle:("Shot folder names: " & pp)
+	if isExtra then
+		pw's setTitle:("Custom subfolders: " & pp)
+	else
+		pw's setTitle:("Shot folder names: " & pp)
+	end if
 	pw's setReleasedWhenClosed:false
 	pw's setLevel:8 -- above the main window
 	set pastePanel to pw
 	set v to pw's contentView()
-	set l to current application's NSTextField's wrappingLabelWithString:"One folder name per line, in shot order. Spaces become dashes; / and : are removed."
+	if isExtra then
+		set l to current application's NSTextField's wrappingLabelWithString:"One subfolder name per line (commas work too). They go inside each shot folder, after the Shot subfolders. Spaces become dashes."
+	else
+		set l to current application's NSTextField's wrappingLabelWithString:"One folder name per line, in shot order. Spaces become dashes; / and : are removed."
+	end if
 	l's setFrame:{{20, 330}, {400, 34}}
 	v's addSubview:l
 	set sv to current application's NSScrollView's alloc()'s initWithFrame:{{20, 60}, {400, 262}}
@@ -2045,12 +2130,20 @@ on openPaste(rows)
 	tv's setAutomaticSpellingCorrectionEnabled:false
 	tv's setTextContainerInset:{4, 6}
 	set AppleScript's text item delimiters to linefeed
-	tv's setString:((item i of rowLists) as text)
+	if isExtra then
+		tv's setString:((item i of rowExtra) as text)
+	else
+		tv's setString:((item i of rowLists) as text)
+	end if
 	set AppleScript's text item delimiters to ""
 	sv's setDocumentView:tv
 	v's addSubview:sv
 	set pasteView to tv
-	set b to current application's NSButton's buttonWithTitle:"Remove list" target:me action:"pasteButton:"
+	if isExtra then
+		set b to current application's NSButton's buttonWithTitle:"Remove all" target:me action:"pasteButton:"
+	else
+		set b to current application's NSButton's buttonWithTitle:"Remove list" target:me action:"pasteButton:"
+	end if
 	b's setFrame:{{14, 13}, {120, 32}}
 	b's setTag:2
 	b's setEnabled:anyList
@@ -2086,7 +2179,11 @@ on openPaste(rows)
 		end repeat
 	end if
 	repeat with k in rows
-		set item k of rowLists to newList
+		if isExtra then
+			set item k of rowExtra to newList
+		else
+			set item k of rowLists to newList
+		end if
 	end repeat
 	tbl's reloadData()
 	win's makeKeyWindow()
