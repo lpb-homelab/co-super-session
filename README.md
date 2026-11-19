@@ -78,7 +78,7 @@ These are the rules the script is built to keep. New features have to keep them 
 **Naming**
 
 - **Every capture file identifies itself.** A file name alone says which job, level 1 and level 2 folders and shot it belongs to. Capture One can only put the capture folder's own name in a file name, so the script fills Capture One's [Name] token with whatever that folder name is missing. When a naming choice leaves something out, a note says so.
-- **Shot folders are either simple or fully mobile.** A shot folder has a plain name (Simple) or carries everything above it in its name (Balanced, Dense), so it can be moved or sent anywhere without losing its context.
+- **Shot folders are either simple or fully mobile, nothing inbetween.** A shot folder has a plain name (Simple) or carries everything above it in its name (Balanced, Dense), so it can be moved or sent anywhere without losing its context.
 - **Nothing is said twice.** The job never appears twice in a file name, and with Balanced naming only the folder you capture into repeats the folders above it.
 - **Names sort by date.** When the date is in a name, it always comes before the job, so sessions, folders and files sort in date order.
 - **Every name is unique.** Two folders that would get the same name, even if they differ only in capitals (RAW and raw), are flagged before anything is created.
