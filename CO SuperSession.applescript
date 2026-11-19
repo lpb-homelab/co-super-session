@@ -943,15 +943,10 @@ on refreshBody()
 	set numTitles to {"Restart in each folder", "Continue per shot prefix", "Continue across all folders"}
 	if ng > 1 then
 		set rNumbering to wantNumbering
-		set titles to {}
-		repeat with k from 1 to 3
-			set end of titles to item k of numTitles & "  (" & my rangePreview(my numberGroups(my numberInput(rGroups), item k of numberingOrder), rDigits) & ")"
-		end repeat
 	else
 		set rNumbering to 2
-		set titles to numTitles
 	end if
-	my fillPopup(pNumbering, titles, my posOf(rNumbering, numberingOrder))
+	my fillPopup(pNumbering, numTitles, my posOf(rNumbering, numberingOrder))
 	pNumbering's setEnabled:(ng > 1)
 
 	-- folder naming. levels: how many folder levels lead down to a capture folder (level folders, then shots)
@@ -2736,28 +2731,6 @@ on numberGroups(groups, numberingMode)
 	end repeat
 	return out
 end numberGroups
-
--- "Studio/S01-03, Rooftop/S04-05, …" for the first four groups
-on rangePreview(numbered, digits)
-	set out to {}
-	set more to false
-	repeat with i from 1 to (count of numbered)
-		set {p, n, s, c} to item i of numbered
-		if c > 0 then
-			if (count of out) is 4 then
-				set more to true
-				exit repeat
-			end if
-			set end of out to p & "/" & n & my pad(s, digits) & "-" & my pad(s + c - 1, digits)
-		end if
-	end repeat
-	if more then set end of out to "…"
-	set oldTID to AppleScript's text item delimiters
-	set AppleScript's text item delimiters to ", "
-	set r to out as text
-	set AppleScript's text item delimiters to oldTID
-	return r
-end rangePreview
 
 -- zero-padded number; never cuts digits off (100 stays 100 with 2 digits)
 on pad(n, digits)
