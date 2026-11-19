@@ -40,6 +40,10 @@ property askPhotographer : true
 -- the job and, with simple folder names, the level folders every capture folder shares.
 
 
+-- Characters no name may use: macOS, Windows, servers and cloud drives refuse or mangle them
+property badCharClass : "[/:\\\\*?\"<>|\\p{Cc}]"
+property badCharsText : "/ : \\ * ? \" < > |" -- the same, as shown in messages
+
 ---------- WINDOW STATE (filled at run time) ----------
 property win : missing value
 property fLocation : missing value
@@ -222,12 +226,7 @@ on main()
 	else
 		set firstFolder to my lastComponent(item 1 of rShotNames)
 	end if
-	-- with nothing missing from the folder names, [Name] isn't in the format; it still holds the job
-	set captureName to rCaptureName
-	if captureName is "" then set captureName to rJob
-	set copyrightNote to my buildSession((POSIX file basePath) as alias, rSession, captureName, rPhotog, rShotNames, rCaptureFormat)
-
-	---------- REMEMBER SETTINGS ----------
+	---------- REMEMBER SETTINGS (first, so a failed build keeps them) ----------
 	my writePref("path", basePath)
 	my writePref("job", rJob) -- client + job combined
 	my writePref("client", rClientRaw)
@@ -288,6 +287,11 @@ on main()
 	my writePref("subnumber", saveCount)
 	if (count of rGroups) > 0 then my writePref("digits", rDigits as text)
 	my writePref("shotrows", my rowsText())
+
+	-- with nothing missing from the folder names, [Name] isn't in the format; it still holds the job
+	set captureName to rCaptureName
+	if captureName is "" then set captureName to rJob
+	set copyrightNote to my buildSession((POSIX file basePath) as alias, rSession, captureName, rPhotog, rShotNames, rCaptureFormat)
 
 	set the clipboard to rSession
 	display notification "Capture into " & firstFolder & copyrightNote with title "Session " & rSession & " ready"
@@ -828,7 +832,7 @@ on refreshBody()
 		set rJob to "client" & partSep & "job"
 		set rSession to rDate & partSep & rJob
 	end if
-	if rJob contains "/" or rJob contains ":" then my addProblem("Please don't use / or : in the client or job name.")
+	if my hasBadChars(rJob) then my addProblem("Please don't use " & badCharsText & " in the client or job name.")
 	if rDateFmt is "" then my addProblem("Enter a date format.")
 	if rDate is "" then my addProblem("Enter a date.")
 	-- session folder names (00-04); the script's properties are what buildSession uses
@@ -841,7 +845,7 @@ on refreshBody()
 	if (cbPrelight's state()) as integer is 1 then
 		set prelightName to rPrelightField
 		if prelightName is "" then my addProblem("Enter a name for the prelight folder, or turn it off.")
-		if prelightName contains "/" or prelightName contains ":" then my addProblem("Please don't use / or : in the prelight folder name.")
+		if my hasBadChars(prelightName) then my addProblem("Please don't use " & badCharsText & " in the prelight folder name.")
 	else
 		set prelightName to ""
 	end if
@@ -854,7 +858,7 @@ on refreshBody()
 	repeat with i from 1 to 5
 		set nm to item i of fnames
 		if nm is "" and i < 5 then my addProblem("The " & item i of folderRoles & " folder needs a name.")
-		if nm contains "/" or nm contains ":" then my addProblem("Please don't use / or : in folder names.")
+		if my hasBadChars(nm) then my addProblem("Please don't use " & badCharsText & " in folder names.")
 		-- compared ignoring case, like the disk: RAW and raw are one folder
 		if nm is not "" and {nm} is in seen then my addProblem("Two session folders are both named “" & nm & "”.")
 		set end of seen to nm
@@ -914,7 +918,7 @@ on refreshBody()
 				if {contents of x} is not in rShotSubs then set end of rShotSubs to contents of x
 			end repeat
 		on error
-			my addProblem("Please don't use / or : in shot subfolder names.")
+			my addProblem("Please don't use " & badCharsText & " in shot subfolder names.")
 		end try
 	end if
 	if not shotsOn then
@@ -928,7 +932,7 @@ on refreshBody()
 			else
 				set c to count of L
 			end if
-			if nm contains "/" or nm contains ":" then my addProblem("Please don't use / or : in the shot folder prefix.")
+			if my hasBadChars(nm) then my addProblem("Please don't use " & badCharsText & " in the shot folder prefix.")
 			set rGroups to {{"", nm, c}}
 			set rGroupLists to {L}
 			set rGroupSubs to {my rowHasSubs(1)}
@@ -947,7 +951,7 @@ on refreshBody()
 				else
 					set c to count of L
 				end if
-				if nm contains "/" or nm contains ":" then my addProblem(p & ": please don't use / or : in the shot folder prefix.")
+				if my hasBadChars(nm) then my addProblem(p & ": please don't use " & badCharsText & " in the shot folder prefix.")
 				set end of rGroups to {p, nm, c}
 				set end of rGroupLists to L
 				set end of rGroupSubs to my rowHasSubs(r)
@@ -1090,7 +1094,7 @@ on refreshBody()
 	if rFilePrefix is "" then set rFilePrefix to rJob
 	fFilePrefix's setPlaceholderString:rJob
 	fFilePrefix's setHidden:(wantFileMode is not 1)
-	if wantFileMode is 1 and (rFilePrefix contains "/" or rFilePrefix contains ":") then my addProblem("Please don't use / or : in the file prefix.")
+	if wantFileMode is 1 and (my hasBadChars(rFilePrefix)) then my addProblem("Please don't use " & badCharsText & " in the file prefix.")
 	set nameParts to {}
 	set rLostNote to ""
 	if rFileMode is 1 then
@@ -1129,6 +1133,8 @@ on refreshBody()
 		set rCaptureFormat to "[Name]" & partSep & "[Destination Folder Name]" & partSep & cnt
 	end if
 
+	my checkNameLengths()
+
 	-- the capture folder and file name, large: first capture in one capture folder
 	my showPreviewName()
 
@@ -1162,6 +1168,56 @@ on refreshBody()
 	end if
 	my updateSepTips()
 end refreshBody
+
+-- A name over 255 bytes can't be created on a Mac: a problem. A path over pathWarnLen
+-- characters may not copy to Windows (260 at most, drive and parent folders included): a note.
+property pathWarnLen : 220
+on checkNameLengths()
+	set capDirs to rShotNames
+	if prelightName is not "" then set capDirs to capDirs & {prelightName}
+	if capDirs is {} then set capDirs to {""} -- capturing straight into RAW
+	set cnt to ""
+	repeat rCounter times
+		set cnt to cnt & "0"
+	end repeat
+	set tooLong to ""
+	set longest to 0
+	set oldTID to AppleScript's text item delimiters
+	set AppleScript's text item delimiters to "/"
+	repeat with x in capDirs
+		set rel to contents of x
+		if rel is "" then
+			set comps to {}
+			set leaf to rawName
+		else
+			set comps to text items of rel
+			set leaf to last item of comps
+		end if
+		-- a capture's file name, with a 4-letter extension (.IIQ, .CR3, .NEF…)
+		set fileName to ""
+		if rCaptureName is not "" then set fileName to rCaptureName & partSep
+		if rFileMode is not 1 then set fileName to fileName & leaf & partSep
+		set fileName to fileName & cnt & ".XXX"
+		repeat with nm in comps & {fileName, rSession}
+			-- UTF-8 takes at most 3 bytes per character, so only long names need counting
+			if tooLong is "" and (length of (contents of nm)) > 85 then
+				if ((current application's NSString's stringWithString:(contents of nm))'s lengthOfBytesUsingEncoding:4) > 255 then set tooLong to contents of nm
+			end if
+		end repeat
+		set pathLen to length of (rSession & "/" & rawName & "/" & rel & "/" & fileName)
+		if pathLen > longest then set longest to pathLen
+	end repeat
+	set AppleScript's text item delimiters to oldTID
+	if tooLong is not "" then my addProblem("This name is too long for macOS (255 bytes at most): “" & (text 1 thru 60 of tooLong) & "…”. Use shorter names or a simpler folder naming.")
+	if longest > pathWarnLen then
+		set t to "Note: the longest path in the session is " & longest & " characters. Windows refuses paths over 260, so copying the session there may fail."
+		if rLostNote is "" then
+			set rLostNote to t
+		else
+			set rLostNote to rLostNote & return & t
+		end if
+	end if
+end checkNameLengths
 
 -- the problem or note above the buttons (two lines at most; the full text is its tooltip)
 on setStatus(t, col)
@@ -1773,7 +1829,7 @@ on rowExtraList(i, label)
 			if {contents of x} is not in out then set end of out to contents of x
 		end repeat
 	on error
-		if label is not missing value then my addProblem(label & "please don't use / or : in custom subfolder names.")
+		if label is not missing value then my addProblem(label & "please don't use " & badCharsText & " in custom subfolder names.")
 	end try
 	return out
 end rowExtraList
@@ -2380,9 +2436,16 @@ on regexReplace(t, pat, rep)
 	return (s's stringByReplacingOccurrencesOfString:pat withString:rep options:1024 range:{0, s's |length|()}) as text
 end regexReplace
 
+-- true when t holds a character from badCharClass
+on hasBadChars(t)
+	set t to t as text
+	if t is "" then return false
+	return (length of my regexReplace(t, badCharClass, "")) < (length of t)
+end hasBadChars
+
 -- Spaces and underscores inside a name become single dashes: "Nike Air_Max" -> "Nike-Air-Max"
 on spacesToDashes(t)
-	return my regexReplace(my regexReplace(t, "[\\s" & otherSep & "]+", innerSep), "^[-_]+|[-_]+$", "")
+	return my regexReplace(my regexReplace(t, "[\\s" & otherSep & "]+", innerSep), "^[-_.]+|[-_.]+$", "")
 end spacesToDashes
 
 -- Collapses any run of separators (. / space _ etc.) into a single dash: "14.11 / 26" -> "14-11-26"
@@ -2538,87 +2601,101 @@ end commonLevel1
 on buildSession(baseFolder, sessionName, jobName, photographer, shotNames, captureFormat)
 	set sessionPath to (POSIX path of baseFolder) & sessionName & "/"
 	set copyrightNote to ""
-	---------- 2. CREATE SESSION ----------
-	tell application "Capture One"
-		activate
-		if templateName is "" then
-			set newDoc to make new document with properties {kind:session, name:sessionName, path:baseFolder}
+	set stage to "starting"
+	try
+		---------- 2. CREATE SESSION ----------
+		set stage to "creating the session in Capture One"
+		tell application "Capture One"
+			activate
+			if templateName is "" then
+				set newDoc to make new document with properties {kind:session, name:sessionName, path:baseFolder}
+			else
+				set newDoc to make new document with properties {kind:session, name:sessionName, path:baseFolder, template:templateName}
+			end if
+		end tell
+
+		-- wait (max 10 s) until Capture One has written the session folder
+		repeat 50 times
+			if my pathExists(sessionPath) then exit repeat
+			delay 0.2
+		end repeat
+		if not my pathExists(sessionPath) then error "Capture One did not create the session folder."
+
+		---------- 3. CREATE FOLDERS (one shell call) ----------
+		set stage to "creating the folders"
+		set rawPath to sessionPath & rawName & "/"
+		set allDirs to {rawPath, sessionPath & selectsName, sessionPath & outputName, sessionPath & trashName}
+		repeat with f in extraFolders
+			set end of allDirs to sessionPath & f
+		end repeat
+		if prelightName is not "" then set end of allDirs to rawPath & prelightName
+		repeat with n in shotNames
+			set end of allDirs to rawPath & n
+		end repeat
+		set cmd to "mkdir -p"
+		repeat with d in allDirs
+			set cmd to cmd & space & quoted form of (d as text)
+		end repeat
+		do shell script cmd
+
+		-- aliases are resolved outside the Capture One tell block on purpose
+		set selectsAlias to (POSIX file (sessionPath & selectsName)) as alias
+		set outputAlias to (POSIX file (sessionPath & outputName)) as alias
+		set trashAlias to (POSIX file (sessionPath & trashName)) as alias
+		-- capture into the prelight folder first; fall back to the first shot folder
+		if prelightName is not "" then
+			set firstCapturePath to rawPath & prelightName
+		else if shotNames is {} then
+			set firstCapturePath to rawPath -- no level folder or shot folders: capture straight into RAW
 		else
-			set newDoc to make new document with properties {kind:session, name:sessionName, path:baseFolder, template:templateName}
+			set firstCapturePath to rawPath & (item 1 of shotNames)
 		end if
-	end tell
+		set firstCaptureAlias to (POSIX file firstCapturePath) as alias
 
-	-- wait (max 10 s) until Capture One has written the session folder
-	repeat 50 times
-		if my pathExists(sessionPath) then exit repeat
-		delay 0.2
-	end repeat
-	if not my pathExists(sessionPath) then error "Capture One did not create the session folder."
+		---------- 4. POINT CAPTURE ONE AT THE NEW FOLDERS ----------
+		set stage to "setting the session's capture, selects, output and trash folders"
+		tell application "Capture One"
+			set captures of newDoc to firstCaptureAlias
+			set selects of newDoc to selectsAlias
+			set output of newDoc to outputAlias
+			set trash of newDoc to trashAlias
+			set capture name of newDoc to jobName
+			set capture name format of newDoc to captureFormat
+		end tell
 
-	---------- 3. CREATE FOLDERS (one shell call) ----------
-	set rawPath to sessionPath & rawName & "/"
-	set allDirs to {rawPath, sessionPath & selectsName, sessionPath & outputName, sessionPath & trashName}
-	repeat with f in extraFolders
-		set end of allDirs to sessionPath & f
-	end repeat
-	if prelightName is not "" then set end of allDirs to rawPath & prelightName
-	repeat with n in shotNames
-		set end of allDirs to rawPath & n
-	end repeat
-	set cmd to "mkdir -p"
-	repeat with d in allDirs
-		set cmd to cmd & space & quoted form of (d as text)
-	end repeat
-	do shell script cmd
+		set stage to "setting the copyright"
+		if photographer is not "" then set copyrightNote to my setCopyright(newDoc, photographer)
+		if copyrightStyle is not "" then
+			try
+				tell application "Capture One" to set apply styles of next capture settings of newDoc to {copyrightStyle}
+			on error
+				set copyrightNote to copyrightNote & " (style “" & copyrightStyle & "” not found)"
+			end try
+		end if
 
-	-- aliases are resolved outside the Capture One tell block on purpose
-	set selectsAlias to (POSIX file (sessionPath & selectsName)) as alias
-	set outputAlias to (POSIX file (sessionPath & outputName)) as alias
-	set trashAlias to (POSIX file (sessionPath & trashName)) as alias
-	-- capture into the prelight folder first; fall back to the first shot folder
-	if prelightName is not "" then
-		set firstCapturePath to rawPath & prelightName
-	else if shotNames is {} then
-		set firstCapturePath to rawPath -- no level folder or shot folders: capture straight into RAW
-	else
-		set firstCapturePath to rawPath & (item 1 of shotNames)
-	end if
-	set firstCaptureAlias to (POSIX file firstCapturePath) as alias
+		set stage to "opening the first capture folder"
+		tell application "Capture One" to browse newDoc to path firstCapturePath
 
-	---------- 4. POINT CAPTURE ONE AT THE NEW FOLDERS ----------
-	tell application "Capture One"
-		set captures of newDoc to firstCaptureAlias
-		set selects of newDoc to selectsAlias
-		set output of newDoc to outputAlias
-		set trash of newDoc to trashAlias
-		set capture name of newDoc to jobName
-		set capture name format of newDoc to captureFormat
-	end tell
-
-	if photographer is not "" then set copyrightNote to my setCopyright(newDoc, photographer)
-	if copyrightStyle is not "" then
-		try
-			tell application "Capture One" to set apply styles of next capture settings of newDoc to {copyrightStyle}
-		on error
-			set copyrightNote to copyrightNote & " (style “" & copyrightStyle & "” not found)"
-		end try
-	end if
-
-	tell application "Capture One" to browse newDoc to path firstCapturePath
-
-	-- remove Capture One's default folders; rmdir only removes them if empty
-	-- (skipping any default name the user chose for one of their own folders)
-	set defaults to {}
-	repeat with d in {"Capture", "Selects", "Output", "Trash"}
-		-- ignoring case, like the disk: a folder named "output" IS Capture One's "Output"
-		if {contents of d} is not in ({rawName, selectsName, outputName, trashName} & extraFolders) then set end of defaults to quoted form of (contents of d)
-	end repeat
-	if defaults is not {} then
-		set AppleScript's text item delimiters to space
-		set dlist to defaults as text
-		set AppleScript's text item delimiters to ""
-		do shell script "cd " & quoted form of sessionPath & " && rmdir " & dlist & " 2>/dev/null; true"
-	end if
+		set stage to "removing Capture One's empty default folders"
+		-- remove Capture One's default folders; rmdir only removes them if empty
+		-- (skipping any default name the user chose for one of their own folders)
+		set defaults to {}
+		repeat with d in {"Capture", "Selects", "Output", "Trash"}
+			-- ignoring case, like the disk: a folder named "output" IS Capture One's "Output"
+			if {contents of d} is not in ({rawName, selectsName, outputName, trashName} & extraFolders) then set end of defaults to quoted form of (contents of d)
+		end repeat
+		if defaults is not {} then
+			set AppleScript's text item delimiters to space
+			set dlist to defaults as text
+			set AppleScript's text item delimiters to ""
+			do shell script "cd " & quoted form of sessionPath & " && rmdir " & dlist & " 2>/dev/null; true"
+		end if
+	on error errMsg number errNum
+		if errNum is -128 then error number -128
+		set msg to "Stopped while " & stage & ":" & return & errMsg
+		if my pathExists(sessionPath) then set msg to msg & return & return & "The session “" & sessionName & "” was created in " & (POSIX path of baseFolder) & " but may be incomplete. Your settings were kept: close the session in Capture One, move its folder to the Bin and run the script again."
+		error msg number errNum
+	end try
 	return copyrightNote
 end buildSession
 
@@ -2704,7 +2781,7 @@ on splitList(t)
 	set out to {}
 	repeat with x in parts
 		set x to my spacesToDashes(my trim(contents of x))
-		if x contains "/" or x contains ":" then error "Folder names can't contain / or :"
+		if my hasBadChars(x) then error "Folder names can't contain " & badCharsText
 		if x is not "" then set end of out to x
 	end repeat
 	return out
@@ -2727,7 +2804,7 @@ end numberInput
 on cleanList(pasted)
 	set out to {}
 	repeat with x in pasted
-		set nm to my spacesToDashes(my regexReplace(contents of x, "[/:]+", " "))
+		set nm to my spacesToDashes(my regexReplace(contents of x, badCharClass & "+", " "))
 		if nm is not "" then set end of out to nm
 	end repeat
 	return out
