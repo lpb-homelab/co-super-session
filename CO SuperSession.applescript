@@ -954,27 +954,8 @@ on refreshBody()
 	if n > 0 then
 		set levels to 1
 		if (item 1 of levelPaths) contains "/" then set levels to 2
-		set p1 to item 1 of levelPaths
-	else
-		set p1 to ""
 	end if
-	set firstShot to ""
-	if ng > 0 then
-		set levels to levels + 1
-		set {p1, n1, s1, c1} to item 1 of my numberGroups(my numberInput(rGroups), rNumbering)
-		set L1 to item 1 of rGroupLists
-		if L1 is {} then
-			set firstShot to n1 & my pad(s1, rDigits)
-		else if rAppend then
-			set firstShot to n1 & my pad(s1, rDigits) & partSep & item 1 of L1
-		else
-			set firstShot to item 1 of L1
-		end if
-	end if
-	-- each choice shows the first capture folder's path, with the prefix ticked now
-	set examplePre to ""
-	if wantFolderDate then set examplePre to rDate & partSep
-	if wantFolderJob or wantFolderDate then set examplePre to examplePre & rJob & partSep
+	if ng > 0 then set levels to levels + 1
 	if levels is 0 then
 		set folderModeIds to {1}
 		set titles to {"(no folders to name)"}
@@ -983,7 +964,7 @@ on refreshBody()
 		if levels is 1 then set folderModeIds to {1, 2} -- one level: dense is the same as balanced
 		set titles to {}
 		repeat with m in folderModeIds
-			set end of titles to item m of {"Simple", "Balanced", "Dense"} & "  (" & my examplePath(p1, firstShot, ng > 0, contents of m, examplePre) & ")"
+			set end of titles to item m of {"Simple", "Balanced", "Dense"}
 		end repeat
 	end if
 	set rFolderMode to my pickId(wantFolderMode, folderModeIds)
@@ -2450,14 +2431,6 @@ on diskFolder(p, isCapture, m, pre)
 	set AppleScript's text item delimiters to oldTID
 	return r
 end diskFolder
-
--- The first capture folder's path for the folder naming popup
-on examplePath(p, shot, hasShots, m, pre)
-	if not hasShots then return my diskFolder(p, true, m, pre)
-	set leaf to my shotPre(p, m, pre) & shot
-	if p is "" then return leaf
-	return my diskFolder(p, false, m, pre) & "/" & leaf
-end examplePath
 
 -- Of the level paths above the capture folders: {the leading part they all share ("Studio"),
 -- the rest that differs, as text ("DAY1, DAY2"; levels split by " / ")}
