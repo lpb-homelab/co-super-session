@@ -2,6 +2,11 @@
 
 All notable changes to CO SuperSession are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+- The shot folder table is remembered: each row's prefix, shots, pasted list and Subfolders checkbox come back the next time for the same level folders
+- Shots per folder (all rows) and Shot folder prefix (all rows) now remember their own values, not those of the last table row
+
 ## v0.3.1 – 2026-11-19
 
 - Parent folders and subfolders are now called Level 1 and Level 2 folders; Subfolders now means only the shot subfolders. Saved settings for these fields (Parent folders, Subfolders, table sort) reset once

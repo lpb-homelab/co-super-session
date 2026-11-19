@@ -122,6 +122,9 @@ property rowNames : {}
 property rowCounts : {}
 property rowLists : {} -- pasted folder names per table row ({} = none)
 property rowSubs : {} -- Subfolders checkbox per table row: true = its shots get the shot subfolders
+property savedRows : {} -- the table rows saved last time: {level path, prefix, shots, own prefix, subfolders, list}
+property rAllPrefix : "" -- the "all rows" prefix and number of shots, read when the window closes
+property rAllCount : ""
 property rGroupSubs : {} -- the Subfolders checkbox of each shot group, parallel to rGroups
 property rShotBase : {} -- the shot folders before their subfolders were added
 property rShotSubFlags : {} -- per shot folder in rShotBase: true = it has the shot subfolders
@@ -191,6 +194,7 @@ on main()
 	set rowLists to {}
 	set rowSubs to {}
 	set rowOwnName to {}
+	set savedRows to my readSavedRows()
 	set modalCode to 0
 	set uiError to ""
 
@@ -258,12 +262,11 @@ on main()
 	repeat with i from 1 to 5
 		my writePref(item i of folderKeys, item i of fnames)
 	end repeat
-	if (count of rGroups) > 0 then
-		set {x, lastPrefix, lastCount} to last item of rGroups
-		my writePref("prefix", lastPrefix)
-		my writePref("subnumber", lastCount as text)
-		my writePref("digits", rDigits as text)
-	end if
+	-- the "all rows" fields as they were, not the last row of the table
+	if rAllPrefix is not "" then my writePref("prefix", rAllPrefix)
+	if rAllCount is not "" then my writePref("subnumber", rAllCount)
+	if (count of rGroups) > 0 then my writePref("digits", rDigits as text)
+	my writePref("shotrows", my rowsText())
 
 	set the clipboard to rSession
 	display notification "Capture into " & firstFolder & copyrightNote with title "Session " & rSession & " ready"
@@ -854,6 +857,8 @@ on refreshBody()
 	rbReplace's setEnabled:(shotsOn and anyList)
 	fShotSubs's setEnabled:shotsOn
 	set rShotSubsField to my trim((fShotSubs's stringValue()) as text)
+	set rAllPrefix to my trim((fAllPrefix's stringValue()) as text)
+	set rAllCount to my trim((fAllCounts's stringValue()) as text)
 	set rShotSubs to {}
 	if shotsOn and rShotSubsField is not "" then
 		try
@@ -1508,15 +1513,25 @@ on syncRows()
 			set nm to item r of rowNames
 			set c to item r of rowCounts
 		else
-			set end of newSubs to true
-			set end of newOwn to false
-			set end of newLists to {}
-			if i > 1 then
-				set nm to item (i - 1) of newNames
-				set c to item (i - 1) of newCounts
+			set sv to my savedRowFor(item i of names)
+			if sv is not missing value then
+				-- a row of the last session: its prefix, shots, list and Subfolders come back as they were
+				set {x, nm, c, ownB, subsB, L} to sv
+				set end of newSubs to subsB
+				set end of newOwn to ownB
+				set end of newLists to L
+				set r to -1 -- so the global prefix and number don't replace them
 			else
-				set nm to defPrefix
-				set c to defCount
+				set end of newSubs to true
+				set end of newOwn to false
+				set end of newLists to {}
+				if i > 1 then
+					set nm to item (i - 1) of newNames
+					set c to item (i - 1) of newCounts
+				else
+					set nm to defPrefix
+					set c to defCount
+				end if
 			end if
 		end if
 		-- new rows follow the global prefix and number when they are set
@@ -1628,6 +1643,59 @@ on rowIsOwn(i)
 	if i > (count of rowOwnName) then return false
 	return item i of rowOwnName
 end rowIsOwn
+
+-- The table rows as one pref: a line per row, tab between its fields
+-- (level path, prefix, shots, own prefix 1/0, subfolders 1/0, list), the list's names joined by
+-- character id 31; folder names come from single-line fields, so none of these can be in them
+on rowsText()
+	set us to character id 31
+	set lines_ to {}
+	set oldTID to AppleScript's text item delimiters
+	repeat with i from 1 to count of rowLevelPaths
+		set L to {}
+		if i ≤ (count of rowLists) then set L to item i of rowLists
+		set AppleScript's text item delimiters to us
+		set lt to L as text
+		set f to {item i of rowLevelPaths, item i of rowNames, item i of rowCounts, my boolText(my rowIsOwn(i)), my boolText(my rowHasSubs(i)), lt}
+		set AppleScript's text item delimiters to tab
+		set end of lines_ to f as text
+	end repeat
+	set AppleScript's text item delimiters to linefeed
+	set t to lines_ as text
+	set AppleScript's text item delimiters to oldTID
+	return t
+end rowsText
+
+on readSavedRows()
+	set out to {}
+	set oldTID to AppleScript's text item delimiters
+	try
+		set AppleScript's text item delimiters to linefeed
+		set lines_ to text items of (my readPref("shotrows", ""))
+		repeat with ln in lines_
+			set AppleScript's text item delimiters to tab
+			set f to text items of (contents of ln)
+			if (count of f) is 6 then
+				set AppleScript's text item delimiters to character id 31
+				set L to {}
+				if item 6 of f is not "" then set L to text items of (item 6 of f)
+				set end of out to {item 1 of f, item 2 of f, item 3 of f, (item 4 of f is "1"), (item 5 of f is "1"), L}
+			end if
+		end repeat
+	end try
+	set AppleScript's text item delimiters to oldTID
+	return out
+end readSavedRows
+
+-- the saved row for a level path (case-sensitive, like the table), or missing value
+on savedRowFor(p)
+	considering case
+		repeat with sr in savedRows
+			if item 1 of sr is p then return contents of sr
+		end repeat
+	end considering
+	return missing value
+end savedRowFor
 
 -- the Subfolders checkbox of table row i (1-based); checked unless it was turned off
 on rowHasSubs(i)
