@@ -76,7 +76,7 @@ property fFolders : {} -- session folder name fields, 00-04
 property docsName : ""
 property folderKeys : {"name_raw", "name_selects", "name_output", "name_trash", "name_docs"}
 property folderRoles : {"RAW", "SELECTS", "OUTPUT", "TRASH", "DOCS"}
-property folderTips : {" (captures)", " (Capture One selects)", " (Capture One output)", " (Capture One trash)", " (plain folder; empty = none)"}
+property folderTips : {"Captures go here", "Capture One's Selects", "Capture One's Output", "Capture One's Trash", "An extra folder for anything (empty = none)"}
 property rLevel1Field : ""
 property tbl : missing value
 property pNumbering : missing value
@@ -138,6 +138,7 @@ property rAppend : true -- true: SHOT01_name; false: the pasted names replace pr
 property rbAppend : missing value -- pasted names: Append (SHOT01_name) or Replace (name)
 property rbReplace : missing value
 property btnPaste : missing value
+property btnShotSubs : missing value -- Paste list… for the Shot subfolders
 property pastePanel : missing value
 property pasteView : missing value
 property defPrefix : "SHOT_"
@@ -336,17 +337,20 @@ on buildWindow()
 	my addLabel(v, "Client:", y)
 	set fClient to my addField(v, my readPref("client", ""), 165, y, 455)
 	fClient's setPlaceholderString:"e.g. Nike"
+	fClient's setToolTip:"Goes into the session name and, through Client + job, the folder and file names"
 
 	set y to my nextRow(24)
 	my addLabel(v, "Job name:", y)
 	set fJob to my addField(v, my readPref("jobname", my readPref("job", "")), 165, y, 455)
 	fJob's setPlaceholderString:"e.g. Air Max campaign"
+	fJob's setToolTip:"Job or project name. Leave it empty to use the client name alone"
 
 	if askPhotographer then
 		set y to my nextRow(24)
 		my addLabel(v, "Photographer:", y)
 		set fPhotog to my addField(v, my readPref("photographer", ""), 165, y, 455)
 		fPhotog's setPlaceholderString:"for copyright metadata (needs Capture One Studio; empty = skip)"
+		fPhotog's setToolTip:"Copyright metadata (Capture One Studio)"
 	end if
 
 	set y to my nextRow(24)
@@ -357,6 +361,7 @@ on buildWindow()
 	v's addSubview:fLocation
 	set b to current application's NSButton's buttonWithTitle:"Choose…" target:me action:"chooseLocation:"
 	b's setFrame:{{515, y - 4}, {110, 32}}
+	b's setToolTip:"Pick the folder the session is created in"
 	v's addSubview:b
 	set chooseBtn to b
 	my showLocation()
@@ -370,7 +375,7 @@ on buildWindow()
 	repeat with i from 1 to 5
 		set f to my addField(v, my readPref(item i of folderKeys, item i of defaultNames), 165 + (i - 1) * 92, y, 87)
 		(f's setPlaceholderString:(item i of defaultNames))
-		(f's setToolTip:((item i of folderRoles) & " folder" & item i of folderTips))
+		(f's setToolTip:(item i of folderTips))
 		set end of fFolders to f
 	end repeat
 
@@ -378,7 +383,7 @@ on buildWindow()
 	my addLabel(v, "Date format:", y)
 	set fmt to my readPref("dateformat", "YYYY-MM-DD")
 	set fDateFmt to my addField(v, fmt, 165, y, 130)
-	fDateFmt's setToolTip:"Tokens: YYYY  YY  MMM (Jan)  MM  DD — e.g. YYMMDD, YYYY-MM-DD. Any separator becomes the date separator chosen below"
+	fDateFmt's setToolTip:"YYYY  YY  MMM  MM  DD in any order, e.g. YYMMDD"
 	my addLabelAt(v, "Date:", 315, y, 45)
 	set fDate to my addField(v, my formatToday(my dashOnly(fmt)), 360, y, 140)
 
@@ -411,6 +416,7 @@ on buildWindow()
 	if defPrelight is "" then set defPrelight to "_prelight"
 	set onPref to my readPref("prelight", "")
 	if onPref is "1" or (onPref is "" and prelightName is not "") then cbPrelight's setState:1
+	cbPrelight's setToolTip:"Created inside RAW and used as the first capture folder"
 	v's addSubview:cbPrelight
 	set fPrelight to my addField(v, my readPref("prelightname", defPrelight), 165, y, 200)
 	fPrelight's setPlaceholderString:defPrelight
@@ -430,6 +436,7 @@ on buildWindow()
 	cbLevel1's setFrame:{{18, y + (vis - 1) * 30 + 1}, {145, 22}}
 	cbLevel1's setAutoresizingMask:8
 	if my readPref("level1", "") is not "" then cbLevel1's setState:1
+	cbLevel1's setToolTip:"A folder level inside RAW, e.g. one folder per brand or day"
 	v's addSubview:cbLevel1
 	set level1Scroll to current application's NSScrollView's alloc()'s initWithFrame:{{162, y - 3}, {463, vis * 30}}
 	level1Scroll's setDrawsBackground:false
@@ -451,6 +458,7 @@ on buildWindow()
 	else if my readPref("shotfolders", "") is "1" then
 		cbShots's setState:1
 	end if
+	cbShots's setToolTip:"Numbered folders to capture into, e.g. SHOT01, SHOT02"
 	v's addSubview:cbShots
 	-- values for every row: one number, applied as you type, and one prefix
 	set allLbl to my addLabelAt(v, "Shots per folder (all rows)", 18, y + 92, 145)
@@ -475,18 +483,18 @@ on buildWindow()
 	fAllPrefix's setPlaceholderString:"SHOT"
 	fAllPrefix's setFrame:{{18, y + 52}, {145, 22}}
 	fAllPrefix's setTag:301
-	fAllPrefix's setToolTip:"Shot folder prefix for every row in the table, except rows whose prefix you typed in the table." & linefeed & "Clear a row's prefix in the table to give it this one again."
+	fAllPrefix's setToolTip:"Global shot folder prefix, unless overwritten"
 	-- a pasted list of folder names for the selected row
 	set btnPaste to current application's NSButton's buttonWithTitle:"Paste list…" target:me action:"pasteList:"
-	btnPaste's setFrame:{{12, y + 18}, {145, 32}}
-	btnPaste's setToolTip:"Paste folder names, one per line, for the selected row"
+	btnPaste's setFrame:{{12, y + 20}, {145, 32}}
+	btnPaste's setToolTip:"Paste folder names, one per line"
 	v's addSubview:btnPaste
 	-- radio buttons sharing a superview and an action work as one group
 	set rbAppend to current application's NSButton's radioButtonWithTitle:"Append" target:me action:"shotsToggled:"
-	rbAppend's setFrame:{{18, y}, {70, 18}}
+	rbAppend's setFrame:{{18, y + 8}, {70, 18}}
 	rbAppend's setToolTip:"Pasted names go after the shot number: SHOT01_name"
 	set rbReplace to current application's NSButton's radioButtonWithTitle:"Replace" target:me action:"shotsToggled:"
-	rbReplace's setFrame:{{88, y}, {75, 18}}
+	rbReplace's setFrame:{{88, y + 8}, {75, 18}}
 	rbReplace's setToolTip:"Pasted names are the shot folders: no prefix, no number"
 	repeat with rb in {rbAppend, rbReplace}
 		((contents of rb)'s setControlSize:1)
@@ -514,7 +522,10 @@ on buildWindow()
 	-- level 1 folders: only shown with two levels (rows are then per level 2)
 	set col to tbl's tableColumnWithIdentifier:"level1"
 	col's setHidden:true
-	col's setHeaderToolTip:"The level 1 folders each level 2 row is created in"
+	col's setHeaderToolTip:"The level 1 folder this row is in. Click to sort"
+	(tbl's tableColumnWithIdentifier:"list")'s setHeaderToolTip:"Pasted shot names; they set the number of shots"
+	(tbl's tableColumnWithIdentifier:"name")'s setHeaderToolTip:"This row's shot folder prefix"
+	(tbl's tableColumnWithIdentifier:"count")'s setHeaderToolTip:"Number of shot folders in this row"
 	-- Subfolders: a checkbox per row; only checked rows get the shot subfolders
 	set col to current application's NSTableColumn's alloc()'s initWithIdentifier:"subs"
 	col's headerCell()'s setStringValue:"Subfolders"
@@ -526,7 +537,7 @@ on buildWindow()
 	chk's setImagePosition:1 -- image only, centred
 	chk's setControlSize:1
 	col's setDataCell:chk
-	col's setHeaderToolTip:"Checked rows get the Shot subfolders inside each of their shot folders"
+	col's setHeaderToolTip:"Add the Shot subfolders to this row"
 	tbl's addTableColumn:col
 	-- Custom subfolders: this row's own subfolders, added to the Shot subfolders
 	set col to current application's NSTableColumn's alloc()'s initWithIdentifier:"extra"
@@ -534,7 +545,7 @@ on buildWindow()
 	col's setWidth:120
 	col's setEditable:false
 	col's dataCell()'s setLineBreakMode:4
-	col's setHeaderToolTip:"Click to paste this row's own subfolders, one per line (select several rows to give them all the same)." & linefeed & "They go inside each of its shot folders, added to the Shot subfolders."
+	col's setHeaderToolTip:"Extra subfolders for this row only"
 	tbl's addTableColumn:col
 	tbl's setAllowsColumnReordering:false
 	tbl's setAllowsColumnSelection:false -- a header click sorts (Level 1, Level 2) instead
@@ -560,20 +571,25 @@ on buildWindow()
 
 	set y to my nextRow(26)
 	my addLabel(v, "Shot subfolders:", y)
-	set fShotSubs to my addField(v, my readPref("shotsubs", ""), 165, y, 455)
-	fShotSubs's setPlaceholderString:"inside every shot folder, e.g. main, plates (empty = none)"
-	fShotSubs's setToolTip:"Unnumbered folders inside every shot folder, separated by commas." & linefeed & "Each is named after its shot (SHOT01_main), so the shot stays in the file name."
+	set fShotSubs to my addField(v, my readPref("shotsubs", ""), 165, y, 330)
+	fShotSubs's setPlaceholderString:"e.g. main, plates (empty = none)"
+	fShotSubs's setToolTip:"Unnumbered folders inside every shot folder"
+	set btnShotSubs to current application's NSButton's buttonWithTitle:"Paste list…" target:me action:"pasteShotSubs:"
+	btnShotSubs's setFrame:{{500, y - 4}, {126, 32}}
+	btnShotSubs's setToolTip:"Paste folder names, one per line"
+	v's addSubview:btnShotSubs
 
 	set y to my nextRow(26)
 	my addLabel(v, "Shot folder count:", y)
-	set pNumbering to my addPopup(v, 165, y, 455)
+	set pNumbering to my addPopup(v, 165, y, 235)
+	pNumbering's setToolTip:"Restart: each folder starts at 01." & linefeed & "Per prefix: rows with the same prefix keep counting." & linefeed & "Across all: one count through every folder."
 
 	set y to my nextRow(26)
 	my addLabel(v, "Folder naming:", y)
-	set pFolderMode to my addPopup(v, 165, y, 320)
+	set pFolderMode to my addPopup(v, 165, y, 235)
 	pFolderMode's setToolTip:"Simple: no folder name repeats the folders above it." & linefeed & "Balanced: only the folder captured into carries all the folders above it." & linefeed & "Dense: every folder carries the folders above it." & linefeed & "File names always get the job and the level 1 and level 2 folders (simple: the ones every capture folder shares)."
-	set digitsLbl1 to my addLabelAt(v, "digits:", 495, y, 50)
-	set pDigits to my addPopup(v, 545, y, 75)
+	set digitsLbl1 to my addLabelAt(v, "digits:", 412, y, 45)
+	set pDigits to my addPopup(v, 457, y, 50)
 	pDigits's addItemsWithTitles:{"1", "2", "3"}
 	pDigits's selectItemAtIndex:((my clampInt(my prefInt("digits", 2), 1, 3)) - 1)
 	pDigits's setToolTip:"Digits of the shot number"
@@ -587,15 +603,15 @@ on buildWindow()
 
 	set y to my nextRow(26)
 	my addLabel(v, "File names:", y)
-	set pFileMode to my addPopup(v, 165, y, 200)
+	set pFileMode to my addPopup(v, 165, y, 235)
 	pFileMode's addItemsWithTitles:{"Simple: prefix + counter", "Job, levels, shot + counter", "Date, job, levels, shot + counter"}
 	pFileMode's selectItemAtIndex:(wantFileMode - 1)
 	pFileMode's setToolTip:"Simple: file prefix + counter (ACME_job_0001)." & linefeed & "Job, levels, shot + counter: the job, the level folders and the shot folder in every file name." & linefeed & "Date, job, levels, shot + counter: the same, starting with the date (always, when the folder names have the date)." & linefeed & "Level folders only show up in file names through the folder names: pick Balanced or Dense folder naming to get them all."
-	set fFilePrefix to my addField(v, wantFilePrefix, 372, y, 113)
+	set digitsLbl2 to my addLabelAt(v, "digits:", 412, y, 45)
+	set pCounter to my addPopup(v, 457, y, 50)
+	set fFilePrefix to my addField(v, wantFilePrefix, 522, y, 98)
 	fFilePrefix's setTag:302
 	fFilePrefix's setToolTip:"File prefix for the simple file names. Empty: client + job."
-	set digitsLbl2 to my addLabelAt(v, "digits:", 495, y, 50)
-	set pCounter to my addPopup(v, 545, y, 75)
 	pCounter's addItemsWithTitles:{"1", "2", "3", "4", "5", "6"}
 	pCounter's selectItemAtIndex:((my clampInt(my prefInt("counterdigits", 4), 1, 6)) - 1)
 	pCounter's setToolTip:"Digits of the file counter"
@@ -667,17 +683,19 @@ on buildWindow()
 
 	set cancelBtn to my addButton(v, "Cancel", 395, 100, 0)
 	cancelBtn's setKeyEquivalent:(character id 27)
+	cancelBtn's setToolTip:"Esc"
 	set createBtn to my addButton(v, "Create Session", 495, 130, 1)
 	createBtn's setKeyEquivalent:return
+	createBtn's setToolTip:"Return"
 	cancelBtn's setAutoresizingMask:1 -- buttons stay at the right edge
 	createBtn's setAutoresizingMask:1
 
-	set stretchy to {fClient, fJob, fLocation, level1Scroll, tblScroll, hint, fShotSubs, pNumbering, pFolderMode}
+	set stretchy to {fClient, fJob, fLocation, level1Scroll, tblScroll, hint, fShotSubs, fFilePrefix}
 	if askPhotographer then set end of stretchy to fPhotog
 	repeat with x in stretchy
 		my setHMask(contents of x, 2)
 	end repeat
-	repeat with x in {chooseBtn, digitsLbl1, pDigits, digitsLbl2, pCounter}
+	repeat with x in {chooseBtn, btnShotSubs}
 		my setHMask(contents of x, 1)
 	end repeat
 
@@ -885,6 +903,7 @@ on refreshBody()
 	rbAppend's setEnabled:(shotsOn and anyList)
 	rbReplace's setEnabled:(shotsOn and anyList)
 	fShotSubs's setEnabled:shotsOn
+	btnShotSubs's setEnabled:shotsOn
 	set rShotSubsField to my trim((fShotSubs's stringValue()) as text)
 	set rAllPrefix to my trim((fAllPrefix's stringValue()) as text)
 	set rAllCount to my trim((fAllCounts's stringValue()) as text)
@@ -1600,8 +1619,10 @@ on syncTop(paths)
 	(tbl's tableColumnWithIdentifier:"level1")'s setHidden:(t is "")
 	if t is "" then
 		(tbl's tableColumnWithIdentifier:"level2")'s headerCell()'s setStringValue:"Level 1"
+		(tbl's tableColumnWithIdentifier:"level2")'s setHeaderToolTip:"The folder this row's shot folders go in"
 	else
 		(tbl's tableColumnWithIdentifier:"level2")'s headerCell()'s setStringValue:"Level 2"
+		(tbl's tableColumnWithIdentifier:"level2")'s setHeaderToolTip:"The folder this row's shot folders go in. Click to sort"
 	end if
 	my showSortIndicator()
 	tbl's headerView()'s setNeedsDisplay:true
@@ -2056,30 +2077,89 @@ on openPaste(rows, kind)
 			if item k of rowLists is not {} then set anyList to true
 		end if
 	end repeat
-	win's makeFirstResponder:(missing value) -- commits a table cell still being edited
-	set nsApp to current application's NSApplication's sharedApplication()
 	set pp to item i of rowLevelPaths -- "Studio/DAY1" with level 2
 	if pp is "" then set pp to rawName
-	set pw to current application's NSPanel's alloc()'s initWithContentRect:{{0, 0}, {440, 380}} styleMask:1 backing:2 defer:false
 	if (count of rows) is (count of rowNames) and (count of rows) > 1 then
 		set pp to "all " & (count of rows) & " rows"
 	else if (count of rows) > 1 then
 		set pp to (count of rows) & " rows"
 	end if
+	set AppleScript's text item delimiters to linefeed
 	if isExtra then
-		pw's setTitle:("Custom subfolders: " & pp)
+		set t0 to (item i of rowExtra) as text
 	else
-		pw's setTitle:("Shot folder names: " & pp)
+		set t0 to (item i of rowLists) as text
 	end if
+	set AppleScript's text item delimiters to ""
+	if isExtra then
+		set {code, t} to my runPastePanel("Custom subfolders: " & pp, "One subfolder name per line (commas work too). They go inside each shot folder, after the Shot subfolders. Spaces become dashes.", t0, "Remove all", anyList)
+	else
+		set {code, t} to my runPastePanel("Shot folder names: " & pp, "One folder name per line, in shot order. Spaces become dashes; / and : are removed.", t0, "Remove list", anyList)
+	end if
+	if code is 0 then return
+	set newList to {}
+	if code is 1 then
+		set parts to ((current application's NSString's stringWithString:t)'s componentsSeparatedByCharactersInSet:(current application's NSCharacterSet's newlineCharacterSet())) as list
+		repeat with x in parts
+			set x to my trim(my regexReplace(contents of x, "\t+", " "))
+			if x is not "" then set end of newList to x
+		end repeat
+	end if
+	repeat with k in rows
+		if isExtra then
+			set item k of rowExtra to newList
+		else
+			set item k of rowLists to newList
+		end if
+	end repeat
+	tbl's reloadData()
+	win's makeKeyWindow()
+	my refresh()
+end openPaste
+
+-- Paste list… next to the Shot subfolders: one per line in, comma-separated back in the field
+on pasteShotSubs:sender
+	if (cbShots's state()) as integer is not 1 then return
+	set cur to my trim((fShotSubs's stringValue()) as text)
+	set L to {}
+	repeat with x in my splitText(cur, ",")
+		set x to my trim(contents of x)
+		if x is not "" then set end of L to x
+	end repeat
+	set AppleScript's text item delimiters to linefeed
+	set t0 to L as text
+	set AppleScript's text item delimiters to ""
+	set {code, t} to my runPastePanel("Shot subfolders", "One subfolder name per line (commas work too). They go inside every shot folder, each named after its shot (SHOT01_main).", t0, "Remove all", (L is not {}))
+	if code is 0 then return
+	set newList to {}
+	if code is 1 then
+		set parts to ((current application's NSString's stringWithString:t)'s componentsSeparatedByCharactersInSet:(current application's NSCharacterSet's newlineCharacterSet())) as list
+		repeat with x in parts
+			repeat with y in my splitText(my regexReplace(contents of x, "\t+", " "), ",")
+				set y to my trim(contents of y)
+				if y is not "" then set end of newList to y
+			end repeat
+		end repeat
+	end if
+	set AppleScript's text item delimiters to ", "
+	fShotSubs's setStringValue:(newList as text)
+	set AppleScript's text item delimiters to ""
+	win's makeKeyWindow()
+	my refresh()
+end pasteShotSubs:
+
+-- The paste window: a text view with Remove / Cancel / OK. Returns {code, text}:
+-- code 0 Cancel, 1 OK, 2 Remove
+on runPastePanel(theTitle, noteText, initialText, removeTitle, removeEnabled)
+	win's makeFirstResponder:(missing value) -- commits a cell or field still being edited
+	set nsApp to current application's NSApplication's sharedApplication()
+	set pw to current application's NSPanel's alloc()'s initWithContentRect:{{0, 0}, {440, 380}} styleMask:1 backing:2 defer:false
+	pw's setTitle:theTitle
 	pw's setReleasedWhenClosed:false
 	pw's setLevel:8 -- above the main window
 	set pastePanel to pw
 	set v to pw's contentView()
-	if isExtra then
-		set l to current application's NSTextField's wrappingLabelWithString:"One subfolder name per line (commas work too). They go inside each shot folder, after the Shot subfolders. Spaces become dashes."
-	else
-		set l to current application's NSTextField's wrappingLabelWithString:"One folder name per line, in shot order. Spaces become dashes; / and : are removed."
-	end if
+	set l to current application's NSTextField's wrappingLabelWithString:noteText
 	l's setFrame:{{20, 330}, {400, 34}}
 	v's addSubview:l
 	set sv to current application's NSScrollView's alloc()'s initWithFrame:{{20, 60}, {400, 262}}
@@ -2094,24 +2174,14 @@ on openPaste(rows, kind)
 	tv's setAutomaticTextReplacementEnabled:false
 	tv's setAutomaticSpellingCorrectionEnabled:false
 	tv's setTextContainerInset:{4, 6}
-	set AppleScript's text item delimiters to linefeed
-	if isExtra then
-		tv's setString:((item i of rowExtra) as text)
-	else
-		tv's setString:((item i of rowLists) as text)
-	end if
-	set AppleScript's text item delimiters to ""
+	tv's setString:initialText
 	sv's setDocumentView:tv
 	v's addSubview:sv
 	set pasteView to tv
-	if isExtra then
-		set b to current application's NSButton's buttonWithTitle:"Remove all" target:me action:"pasteButton:"
-	else
-		set b to current application's NSButton's buttonWithTitle:"Remove list" target:me action:"pasteButton:"
-	end if
+	set b to current application's NSButton's buttonWithTitle:removeTitle target:me action:"pasteButton:"
 	b's setFrame:{{14, 13}, {120, 32}}
 	b's setTag:2
-	b's setEnabled:anyList
+	b's setEnabled:removeEnabled
 	v's addSubview:b
 	set b to current application's NSButton's buttonWithTitle:"Cancel" target:me action:"pasteButton:"
 	b's setFrame:{{220, 13}, {100, 32}}
@@ -2134,26 +2204,8 @@ on openPaste(rows, kind)
 	set t to (tv's |string|()) as text
 	pw's orderOut:me
 	set {pastePanel, pasteView} to {missing value, missing value}
-	if code is 0 then return
-	set newList to {}
-	if code is 1 then
-		set parts to ((current application's NSString's stringWithString:t)'s componentsSeparatedByCharactersInSet:(current application's NSCharacterSet's newlineCharacterSet())) as list
-		repeat with x in parts
-			set x to my trim(my regexReplace(contents of x, "\t+", " "))
-			if x is not "" then set end of newList to x
-		end repeat
-	end if
-	repeat with k in rows
-		if isExtra then
-			set item k of rowExtra to newList
-		else
-			set item k of rowLists to newList
-		end if
-	end repeat
-	tbl's reloadData()
-	win's makeKeyWindow()
-	my refresh()
-end openPaste
+	return {code, t}
+end runPastePanel
 
 on pasteButton:sender
 	current application's NSApplication's sharedApplication()'s stopModalWithCode:((sender's tag()) as integer)
@@ -2186,7 +2238,7 @@ on releaseWindow()
 	set {win, cbLevel1, formView} to {missing value, missing value, missing value}
 	set {tbl, tblScroll, rowLevel1} to {missing value, missing value, ""}
 	set {rbAppend, rbReplace} to {missing value, missing value}
-	set {btnPaste, pastePanel, pasteView} to {missing value, missing value, missing value}
+	set {btnPaste, pastePanel, pasteView, btnShotSubs} to {missing value, missing value, missing value, missing value}
 	set {fClient, cbLevel2, fAllCounts, fFileName, fShotName} to {missing value, missing value, missing value, missing value, missing value}
 	set fAllPrefix to missing value
 	set {pdFieldW, pdRightX} to {165, 235}
@@ -2635,6 +2687,15 @@ on level1Of(relPath)
 end level1Of
 
 -- "Studio, Day 1,, Roof top" -> {"Studio", "Day-1", "Roof-top"}
+-- t split at sep, as typed (no cleanup)
+on splitText(t, sep)
+	set oldTID to AppleScript's text item delimiters
+	set AppleScript's text item delimiters to sep
+	set parts to text items of t
+	set AppleScript's text item delimiters to oldTID
+	return parts
+end splitText
+
 on splitList(t)
 	set oldTID to AppleScript's text item delimiters
 	set AppleScript's text item delimiters to ","
@@ -2978,8 +3039,6 @@ on tableGrows(flag)
 		set h to ((contents of sub)'s autoresizingMask() as integer) mod 8 -- keep the horizontal part
 		if ((contents of sub)'s isEqual:grower) as boolean then
 			((contents of sub)'s setAutoresizingMask:(h + 16))
-		else if flag and (((contents of sub)'s isEqual:btnPaste) as boolean or ((contents of sub)'s isEqual:rbAppend) as boolean or ((contents of sub)'s isEqual:rbReplace) as boolean) then
-			((contents of sub)'s setAutoresizingMask:h) -- beside the table's bottom edge: follows it down
 		else if (flag and sy + sh > gy + 1) or (not flag and sy ≥ gy) then
 			((contents of sub)'s setAutoresizingMask:(h + 8)) -- beside or above it: stays at the top
 		else

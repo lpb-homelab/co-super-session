@@ -8,6 +8,9 @@ All notable changes to CO SuperSession are listed here. Versions follow [Semanti
 - Shots per folder (all rows) and Shot folder prefix (all rows) now remember their own values, not those of the last table row
 - Shot folder table: new Custom subfolders column; click it to paste a row's own subfolders, one per line (select several rows to give them all the same). They are added inside each of its shot folders, on top of the Shot subfolders, and are remembered with the row
 - The preview caption "Shot folder name" is now "Capture folder name". Click it or the file name to step through the capture folders in order (each shot folder, then prelight)
+- Shot subfolders: new Paste list… button to paste them one per line
+- Shorter Shot folder count, Folder naming and File names menus, with the digits menus right next to them
+- Tooltips: new ones for Client, Job name, Photographer, Choose…, the Prelight, Level 1 and Shot folders checkboxes, the Level 2, Shot folder prefix, Shots and List column headers, Shot folder count, Cancel and Create Session; shorter ones for the session folders, Date format, the shot folder prefix, both Paste list… buttons, Shot subfolders and the Subfolders columns
 
 ## v0.3.1 – 2026-11-19
 
