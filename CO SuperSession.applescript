@@ -1,6 +1,6 @@
 -- CO SuperSession
 -- Every question in one window with a live preview. Creates a Capture One session with:
---   00_RAW/_prelight (first capture folder), optional parent folders (location, day,
+--   00_RAW/_prelight (first capture folder), optional level folders (location, day,
 --   scene, category) with numbered shot folders, 01_SELECTS, 02_OUTPUT, 03_TRASH, 04_DOCS.
 -- Sets capture/selects/output/trash, capture file naming and optionally a copyright style.
 -- Edit THIS file only. Build and install with ./install.sh.
@@ -16,7 +16,7 @@ use framework "Foundation"
 use framework "AppKit"
 use scripting additions
 
-property scriptVersion : "0.3.0" -- bump on every release, matching the git tag (vX.Y.Z)
+property scriptVersion : "0.3.1" -- bump on every release, matching the git tag (vX.Y.Z)
 
 ---------- SETTINGS (edit to taste) ----------
 property prefsDomain : "com.lpb.COSession"
@@ -32,8 +32,10 @@ property templateName : "" -- saved Capture One session template name, "" for no
 property copyrightStyle : ""
 -- Ask for a photographer name and write it as copyright metadata (needs Capture One Studio)
 property askPhotographer : true
--- [Name] is Capture One's "capture name", which the script sets to the job name
-property captureFormats : {"[Destination Folder Name]_[4 Digit Counter]", "[Name]_[4 Digit Counter]", "[Name]_[Destination Folder Name]_[4 Digit Counter]", "[Document Name]_[Destination Folder Name]_[4 Digit Counter]", "[Name]_[Destination Folder Name]_[4 Digit Counter]", "[Document Name]_[4 Digit Counter]"} -- 5: [Name] is set to the date instead of the job; 6: [Document Name] is the session name (date_job)
+-- File names are [Name]_[Destination Folder Name]_[Counter]. Capture One only knows the name
+-- of the folder captured into (it has no level folder token for capture naming), so [Name],
+-- its one session-wide "capture name", holds whatever that folder name is missing: the date,
+-- the job and, with simple folder names, the level folders every capture folder shares.
 
 
 ---------- WINDOW STATE (filled at run time) ----------
@@ -46,20 +48,20 @@ property rJobRaw : ""
 property fDateFmt : missing value
 property fDate : missing value
 property fPhotog : missing value
-property parentScroll : missing value
-property parentDoc : missing value
-property pdFieldW : 165 -- width of each parent and subfolder field (layoutParentDoc)
-property pdRightX : 235 -- x of the subfolder column
-property parentList : {""} -- one item per parent folder field
-property subList : {""} -- one item per subfolder field (second parent level)
-property subOn : false
-property cbSub : missing value
-property rSubField : ""
-property cbParents : missing value
+property level1Scroll : missing value
+property level1Doc : missing value
+property pdFieldW : 165 -- width of each level folder and level 2 field (layoutLevelDoc)
+property pdRightX : 235 -- x of the level 2 column
+property level1List : {""} -- one item per level 1 field
+property level2List : {""} -- one item per level 2 field (second level)
+property level2On : false
+property cbLevel2 : missing value
+property rLevel2Field : ""
+property cbLevel1 : missing value
 property cbShots : missing value
 property fAllCounts : missing value -- sets the number of shots for every table row
-property fAllPrefix : missing value -- sets the shot prefix of every row not typed in the table
-property rowSort : "parent" -- table order with two levels: "parent" (by parent, then subfolder) or "sub"
+property fAllPrefix : missing value -- sets the shot folder prefix of every row not typed in the table
+property rowSort : "level1" -- table order with two levels: "level1" (by level 1, then level 2) or "level2"
 property rowOwnName : {} -- per table row: true once its prefix was typed in the table (the global prefix leaves it alone)
 property cbPrelight : missing value
 property fPrelight : missing value
@@ -73,17 +75,22 @@ property docsName : ""
 property folderKeys : {"name_raw", "name_selects", "name_output", "name_trash", "name_docs"}
 property folderRoles : {"RAW", "SELECTS", "OUTPUT", "TRASH", "DOCS"}
 property folderTips : {" (captures)", " (Capture One selects)", " (Capture One output)", " (Capture One trash)", " (plain folder; empty = none)"}
-property rParentsField : ""
+property rLevel1Field : ""
 property tbl : missing value
 property pNumbering : missing value
-property pMode : missing value
+property pFolderMode : missing value -- folder naming: simple, balanced, dense
+property cbFolderJob : missing value -- client + job in front of the prefixed folder names
+property cbFolderDate : missing value -- date in front of the prefixed folder names
+property pFileMode : missing value -- file naming: simple, all levels, date + all levels
+property fFilePrefix : missing value -- file prefix of the simple file naming; empty follows client + job
+property fileModeIds : {1, 2, 3}
 property pDigits : missing value
-property pNaming : missing value
 property pCounter : missing value
 property rbSep : {} -- separator radio buttons
 property previewView : missing value -- the folder tree, in the Preview window
 property previewPanel : missing value -- the Preview window (opened with Preview file tree…)
 property fStatus : missing value -- problems and notes, above the buttons
+property fShotName : missing value -- the resulting shot folder name, above the file name
 property fFileName : missing value -- the resulting file name, shown large above the summary
 property formView : missing value -- the form; its wide fields and the shots table stretch with the window
 property userW : 640 -- window width the user dragged to (remembered between runs)
@@ -93,7 +100,7 @@ property inSymResize : false -- guards windowDidResize against its own setFrame
 -- separators: 1 standard (ISO 8601 dates with -, parts joined with _, spaces in names become -),
 -- 2 all dashes, 3 all underscores, 4 the opposite of standard (a joke: _ in dates and names, - between parts)
 property sepStyle : 1
-property partSep : "_" -- between date, job, parent, shot, counter
+property partSep : "_" -- between date, job, level folders, shot, counter
 property innerSep : "-" -- replaces spaces inside a name
 property otherSep : "_" -- the other character, also turned into innerSep inside names
 property dateSep : "-" -- between date parts
@@ -101,16 +108,16 @@ property createBtn : missing value
 property winH : 0
 property cursorTop : 0
 
-property parentPath : ""
-property rowParents : {} -- shots table: one row per parent path ("" = no parents; "Studio/DAY1" with subfolders)
-property rowTop : "" -- with two parent levels: the level 1 parents ("Studio, Rooftop"), else ""
+property basePath : ""
+property rowLevelPaths : {} -- shots table: one row per level path ("" = no level folders; "Studio/DAY1" with level 2)
+property rowLevel1 : "" -- with two levels: the level 1 folders ("Studio, Rooftop"), else ""
 property tblScroll : missing value -- the shots table's scroll view, the part that grows when the window is made taller
 property tblBase : 154 -- the shots table's normal height (room for the controls beside it)
 property tblExtra : 0 -- how much taller than tblBase the table is now
 property tblFit : 0 -- extra height the table needs to show every row without scrolling
 property tblUser : 0 -- extra height the user dragged the table to (remembered between runs)
 property dragStartH : 0 -- window content height when a drag started
-property tblNeedW : 0 -- window content width at which the level 1 parents fit in the table (0 = no need)
+property tblNeedW : 0 -- window content width at which the level 1 folders fit in the table (0 = no need)
 property rowNames : {}
 property rowCounts : {}
 property rowLists : {} -- pasted folder names per table row ({} = none)
@@ -128,12 +135,13 @@ property pasteView : missing value
 property defPrefix : "SHOT_"
 property defCount : "10"
 property wantNumbering : 1 -- what the user picked; used whenever it's available
-property wantMode : 1
-property wantLeaf : 8 -- shot folders off, with subfolders: 7 subfolder, 8 parent_subfolder
-property wantNaming : 1
-property modeIds : {1} -- ids behind the current popup items
+property wantFolderMode : 2 -- 1 simple, 2 balanced, 3 dense
+property wantFolderJob : true
+property wantFolderDate : false
+property wantFileMode : 2 -- 1 simple (file prefix + counter), 2 all levels, 3 date + all levels
+property wantFilePrefix : "" -- typed file prefix; empty = client + job
+property folderModeIds : {1} -- ids behind the current folder naming popup items
 property numberingOrder : {2, 1, 3} -- shot numbering ids in menu order
-property namingIds : {1}
 property modalCode : 0
 property uiError : "" -- an error while building the window; Cocoa would swallow it, main reports it
 
@@ -144,15 +152,21 @@ property rDateFmt : ""
 property rDate : ""
 property rSession : ""
 property rPhotog : ""
-property rParentsText : ""
+property rLevel1Text : ""
 property rGroups : {}
 property rShotNames : {}
 property rDigits : 2
 property rCounter : 4
 property rNumbering : 1
-property rMode : 1
-property rParentLost : false -- there are parent folders, but the capture folder names leave them out
-property rNaming : 1
+-- folder naming: 1 simple (no folder carries the folders above it), 2 balanced (only the
+-- folder captured into carries them all), 3 dense (every folder carries the ones above it)
+property rFolderMode : 1
+property rPre : "" -- date and/or job in front of the prefixed folder names ("2026-11-17_ACME_"), or ""
+property rFileMode : 2
+property rFilePrefix : ""
+property rCaptureName : "" -- Capture One's [Name]: what the capture folder names are missing
+property rCaptureFormat : ""
+property rLostNote : "" -- simple naming: the level 1 folders file names leave out, as a note
 
 on run
 	try
@@ -164,16 +178,14 @@ on run
 end run
 
 on main()
-	set parentPath to my readPref("path", POSIX path of (path to desktop folder))
-	if not my pathExists(parentPath) then set parentPath to POSIX path of (path to desktop folder)
+	set basePath to my readPref("path", POSIX path of (path to desktop folder))
+	if not my pathExists(basePath) then set basePath to POSIX path of (path to desktop folder)
 	set defPrefix to my readPref("prefix", "SHOT")
 	set defCount to my readPref("subnumber", "10")
 	set wantNumbering to my clampInt(my prefInt("numbering", 2), 1, 3)
 	my setSeparators(my clampInt(my prefInt("separators", 1), 1, 4))
-	set wantMode to my prefInt("mode", 1)
-	set wantLeaf to my prefInt("leafmode", 8)
-	set wantNaming to my prefInt("filenaming", 3) -- fresh start: job_folder_counter
-	set rowParents to {}
+	my readNamingPrefs()
+	set rowLevelPaths to {}
 	set rowNames to {}
 	set rowCounts to {}
 	set rowLists to {}
@@ -199,31 +211,32 @@ on main()
 	else
 		set firstFolder to my lastComponent(item 1 of rShotNames)
 	end if
-	set captureFormat to my replaceText(my replaceText(item rNaming of captureFormats, "[4 Digit Counter]", "[" & rCounter & " Digit Counter]"), "]_[", "]" & partSep & "[")
-	-- [Name] (Capture One's capture name) is the job, or the date for date_folder_counter
-	set captureName to rJob
-	if rNaming is 5 then set captureName to rDate
-	set copyrightNote to my buildSession((POSIX file parentPath) as alias, rSession, captureName, rPhotog, rShotNames, captureFormat)
+	-- with nothing missing from the folder names, [Name] isn't in the format; it still holds the job
+	set captureName to rCaptureName
+	if captureName is "" then set captureName to rJob
+	set copyrightNote to my buildSession((POSIX file basePath) as alias, rSession, captureName, rPhotog, rShotNames, rCaptureFormat)
 
 	---------- REMEMBER SETTINGS ----------
-	my writePref("path", parentPath)
+	my writePref("path", basePath)
 	my writePref("job", rJob) -- client + job combined
 	my writePref("client", rClientRaw)
 	my writePref("jobname", rJobRaw)
 	my writePref("dateformat", rDateFmt)
 	if askPhotographer then my writePref("photographer", rPhotog)
-	my writePref("parents", rParentsText) -- "" when the checkbox is off
-	my writePref("parentstext", rParentsField)
-	my writePref("subtext", rSubField)
-	if subOn then
-		my writePref("subfolders", "1")
+	my writePref("level1", rLevel1Text) -- "" when the checkbox is off
+	my writePref("level1text", rLevel1Field)
+	my writePref("level2text", rLevel2Field)
+	if level2On then
+		my writePref("level2", "1")
 	else
-		my writePref("subfolders", "0")
+		my writePref("level2", "0")
 	end if
 	-- the choices the user picked, not the stand-ins shown when one isn't available this time
-	my writePref("filenaming", wantNaming as text)
-	my writePref("mode", wantMode as text)
-	my writePref("leafmode", wantLeaf as text)
+	my writePref("foldernaming", wantFolderMode as text)
+	my writePref("folderjob", my boolText(wantFolderJob))
+	my writePref("folderdate", my boolText(wantFolderDate))
+	my writePref("filemode", wantFileMode as text)
+	my writePref("fileprefix", wantFilePrefix)
 	my writePref("numbering", wantNumbering as text)
 	my writePref("counterdigits", rCounter as text)
 	my writePref("separators", sepStyle as text)
@@ -274,8 +287,8 @@ on buildWindow()
 	-- accessory: the background osascript process may own windows and come to the front
 	nsApp's setActivationPolicy:1
 	my installEditMenu(nsApp)
-	my loadParentList()
-	set winH to 852 + ((my visibleParentRows()) - 1) * 30
+	my loadLevelLists()
+	set winH to 956 + ((my visibleLevelRows()) - 1) * 30
 	if askPhotographer then set winH to winH + 32
 	set cursorTop to 20
 	set userW to my prefInt("winwidth", 640)
@@ -285,7 +298,7 @@ on buildWindow()
 	w's setReleasedWhenClosed:false
 	w's setDelegate:me
 	w's setLevel:3 -- floating, stays above Capture One
-	w's setAutorecalculatesKeyViewLoop:true -- Tab also reaches parent fields added later
+	w's setAutorecalculatesKeyViewLoop:true -- Tab also reaches level 1 fields added later
 	set win to w
 	set cv to w's contentView()
 	-- the form follows the window's size: labels stay on the left, the wide fields and the shots
@@ -381,30 +394,30 @@ on buildWindow()
 	fPrelight's setToolTip:"Created inside RAW and used as the first capture folder"
 	fPrelight's setEnabled:((cbPrelight's state()) as integer is 1)
 
-	-- everything above the parent folders stays pinned to the top when the window grows
+	-- everything above the level folders stays pinned to the top when the window grows
 	repeat with sub in (v's subviews() as list)
 		(sub's setAutoresizingMask:8)
 	end repeat
 
-	-- parent folders: one field per folder, + adds one below, − removes it.
+	-- level folders: one field per folder, + adds one below, − removes it.
 	-- The area grows the window up to 5 rows, then scrolls.
-	set vis to my visibleParentRows()
+	set vis to my visibleLevelRows()
 	set y to my nextRow(24 + (vis - 1) * 30)
-	set cbParents to current application's NSButton's checkboxWithTitle:"Parent folders:" target:me action:"parentsToggled:"
-	cbParents's setFrame:{{18, y + (vis - 1) * 30 + 1}, {145, 22}}
-	cbParents's setAutoresizingMask:8
-	if my readPref("parents", "") is not "" then cbParents's setState:1
-	v's addSubview:cbParents
-	set parentScroll to current application's NSScrollView's alloc()'s initWithFrame:{{162, y - 3}, {463, vis * 30}}
-	parentScroll's setDrawsBackground:false
-	parentScroll's setBorderType:0
-	parentScroll's setHasVerticalScroller:true
-	parentScroll's setAutohidesScrollers:true
-	parentScroll's setAutoresizingMask:16 -- grows with the window
-	set parentDoc to current application's NSView's alloc()'s initWithFrame:{{0, 0}, {455, vis * 30}}
-	parentScroll's setDocumentView:parentDoc
-	v's addSubview:parentScroll
-	my rebuildParentRows(0)
+	set cbLevel1 to current application's NSButton's checkboxWithTitle:"Level 1 folders:" target:me action:"level1Toggled:"
+	cbLevel1's setFrame:{{18, y + (vis - 1) * 30 + 1}, {145, 22}}
+	cbLevel1's setAutoresizingMask:8
+	if my readPref("level1", "") is not "" then cbLevel1's setState:1
+	v's addSubview:cbLevel1
+	set level1Scroll to current application's NSScrollView's alloc()'s initWithFrame:{{162, y - 3}, {463, vis * 30}}
+	level1Scroll's setDrawsBackground:false
+	level1Scroll's setBorderType:0
+	level1Scroll's setHasVerticalScroller:true
+	level1Scroll's setAutohidesScrollers:true
+	level1Scroll's setAutoresizingMask:16 -- grows with the window
+	set level1Doc to current application's NSView's alloc()'s initWithFrame:{{0, 0}, {455, vis * 30}}
+	level1Scroll's setDocumentView:level1Doc
+	v's addSubview:level1Scroll
+	my rebuildLevelRows(0)
 
 	set y to my nextRow(tblBase)
 	set cbShots to current application's NSButton's checkboxWithTitle:"Shot folders:" target:me action:"shotsToggled:"
@@ -417,19 +430,29 @@ on buildWindow()
 	end if
 	v's addSubview:cbShots
 	-- values for every row: one number, applied as you type, and one prefix
-	set allLbl to my addLabelAt(v, "Global #:", 10, y + 92, 84)
-	allLbl's setFont:(current application's NSFont's systemFontOfSize:11)
-	allLbl's setAlignment:(current application's NSTextAlignmentRight)
-	set fAllCounts to my addField(v, "", 98, y + 92, 60)
+	set allLbl to my addLabelAt(v, "Shots per folder (all rows)", 18, y + 92, 145)
+	allLbl's setFrame:{{18, y + 116}, {145, 14}}
+	allLbl's setFont:(current application's NSFont's systemFontOfSize:10)
+	allLbl's setTextColor:(current application's NSColor's secondaryLabelColor)
+	-- starts at the last used number (10 the first time; never 0)
+	set allCount to defCount
+	if allCount is "0" or allCount is "" then set allCount to "10"
+	set fAllCounts to my addField(v, allCount, 18, y + 92, 145)
+	fAllCounts's setFrame:{{18, y + 92}, {44, 22}} -- sized for up to 3 digits
 	fAllCounts's setTag:300
 	fAllCounts's setToolTip:"Number of shots for every row in the table"
 	-- the prefix: a prefix typed in the table wins over it
-	set preLbl to my addLabelAt(v, "Global prefix:", 10, y + 62, 84)
-	preLbl's setFont:(current application's NSFont's systemFontOfSize:11)
-	preLbl's setAlignment:(current application's NSTextAlignmentRight)
-	set fAllPrefix to my addField(v, "", 98, y + 62, 60)
+	set preLbl to my addLabelAt(v, "Shot folder prefix (all rows)", 18, y + 52, 145)
+	preLbl's setFrame:{{18, y + 76}, {145, 14}}
+	preLbl's setFont:(current application's NSFont's systemFontOfSize:10)
+	preLbl's setTextColor:(current application's NSColor's secondaryLabelColor)
+	-- starts at the last used prefix (SHOT the first time)
+	set allPrefix to defPrefix
+	if allPrefix is "" then set allPrefix to "SHOT"
+	set fAllPrefix to my addField(v, allPrefix, 18, y + 52, 145)
+	fAllPrefix's setFrame:{{18, y + 52}, {145, 22}}
 	fAllPrefix's setTag:301
-	fAllPrefix's setToolTip:"Shot prefix for every row in the table, except rows whose prefix you typed in the table." & linefeed & "Clear a row's prefix in the table to give it this one again."
+	fAllPrefix's setToolTip:"Shot folder prefix for every row in the table, except rows whose prefix you typed in the table." & linefeed & "Clear a row's prefix in the table to give it this one again."
 	-- a pasted list of folder names for the selected row
 	set btnPaste to current application's NSButton's buttonWithTitle:"Paste list…" target:me action:"pasteList:"
 	btnPaste's setFrame:{{12, y + 18}, {145, 32}}
@@ -456,7 +479,7 @@ on buildWindow()
 	sv's setHasVerticalScroller:true
 	sv's setBorderType:2
 	set tbl to current application's NSTableView's alloc()'s initWithFrame:{{0, 0}, {455, tblBase}}
-	repeat with c in {{"top", "Parent", 100, false}, {"parent", "Parent", 130, false}, {"name", "Shot prefix", 165, true}, {"count", "Shots", 60, true}, {"list", "List", 75, false}}
+	repeat with c in {{"level1", "Level 1", 100, false}, {"level2", "Level 2", 130, false}, {"name", "Shot folder prefix", 165, true}, {"count", "Shots", 60, true}, {"list", "List", 75, false}}
 		set {cid, ctitle, cw, ced} to contents of c
 		set col to (current application's NSTableColumn's alloc()'s initWithIdentifier:cid)
 		(col's headerCell()'s setStringValue:ctitle)
@@ -465,10 +488,10 @@ on buildWindow()
 		(col's dataCell()'s setLineBreakMode:4) -- … at the end when it doesn't fit
 		(tbl's addTableColumn:col)
 	end repeat
-	-- level 1 parents: only shown with two parent levels (rows are then per subfolder)
-	set col to tbl's tableColumnWithIdentifier:"top"
+	-- level 1 folders: only shown with two levels (rows are then per level 2)
+	set col to tbl's tableColumnWithIdentifier:"level1"
 	col's setHidden:true
-	col's setHeaderToolTip:"The parent folders each subfolder row is created in"
+	col's setHeaderToolTip:"The level 1 folders each level 2 row is created in"
 	-- Subfolders: a checkbox per row; only checked rows get the shot subfolders
 	set col to current application's NSTableColumn's alloc()'s initWithIdentifier:"subs"
 	col's headerCell()'s setStringValue:"Subfolders"
@@ -483,8 +506,8 @@ on buildWindow()
 	col's setHeaderToolTip:"Checked rows get the Shot subfolders inside each of their shot folders"
 	tbl's addTableColumn:col
 	tbl's setAllowsColumnReordering:false
-	tbl's setAllowsColumnSelection:false -- a header click sorts (Parent, Subfolder) instead
-	set rowSort to my readPref("tablesort", "parent")
+	tbl's setAllowsColumnSelection:false -- a header click sorts (Level 1, Level 2) instead
+	set rowSort to my readPref("tablesort", "level1")
 	tbl's setAllowsMultipleSelection:true -- ⌘A or ⌘/⇧-click: paste one list into several rows
 	tbl's setColumnAutoresizingStyle:0 -- sizeColumns fits them to their content
 	tbl's setUsesAlternatingRowBackgroundColors:true
@@ -515,24 +538,63 @@ on buildWindow()
 	set pNumbering to my addPopup(v, 165, y, 455)
 
 	set y to my nextRow(26)
-	my addLabel(v, "Shot folder naming:", y)
-	set pMode to my addPopup(v, 165, y, 320)
+	my addLabel(v, "Folder naming:", y)
+	set pFolderMode to my addPopup(v, 165, y, 320)
+	pFolderMode's setToolTip:"Simple: no folder name repeats the folders above it." & linefeed & "Balanced: only the folder captured into carries all the folders above it." & linefeed & "Dense: every folder carries the folders above it." & linefeed & "File names always get the job and the level 1 and level 2 folders (simple: the ones every capture folder shares)."
 	set digitsLbl1 to my addLabelAt(v, "digits:", 495, y, 50)
 	set pDigits to my addPopup(v, 545, y, 75)
 	pDigits's addItemsWithTitles:{"1", "2", "3"}
 	pDigits's selectItemAtIndex:((my clampInt(my prefInt("digits", 2), 1, 3)) - 1)
+	pDigits's setToolTip:"Digits of the shot number"
+
+	set y to my nextRow(24)
+	my addLabel(v, "Shot folder prefix:", y)
+	set cbFolderJob to my addCheck(v, "Client + job", 165, y, 120, wantFolderJob)
+	cbFolderJob's setToolTip:"Client and job name in front of every folder name that carries the folders above it"
+	set cbFolderDate to my addCheck(v, "Date", 290, y, 80, wantFolderDate)
+	cbFolderDate's setToolTip:"Date in front of every folder name that carries the folders above it, always with the client + job." & linefeed & "File names then always start with the date too."
 
 	set y to my nextRow(26)
-	my addLabel(v, "Capture file naming:", y)
-	set pNaming to my addPopup(v, 165, y, 320)
+	my addLabel(v, "File names:", y)
+	set pFileMode to my addPopup(v, 165, y, 200)
+	pFileMode's addItemsWithTitles:{"Simple: prefix + counter", "Job, levels, shot + counter", "Date, job, levels, shot + counter"}
+	pFileMode's selectItemAtIndex:(wantFileMode - 1)
+	pFileMode's setToolTip:"Simple: file prefix + counter (ACME_job_0001)." & linefeed & "Job, levels, shot + counter: the job, the level folders and the shot folder in every file name." & linefeed & "Date, job, levels, shot + counter: the same, starting with the date (always, when the folder names have the date)." & linefeed & "Level folders only show up in file names through the folder names: pick Balanced or Dense folder naming to get them all."
+	set fFilePrefix to my addField(v, wantFilePrefix, 372, y, 113)
+	fFilePrefix's setTag:302
+	fFilePrefix's setToolTip:"File prefix for the simple file names. Empty: client + job."
 	set digitsLbl2 to my addLabelAt(v, "digits:", 495, y, 50)
 	set pCounter to my addPopup(v, 545, y, 75)
 	pCounter's addItemsWithTitles:{"1", "2", "3", "4", "5", "6"}
 	pCounter's selectItemAtIndex:((my clampInt(my prefInt("counterdigits", 4), 1, 6)) - 1)
+	pCounter's setToolTip:"Digits of the file counter"
 
 	-- the end result: what the files will be called
 	set v to cv
 	set cursorTop to cursorTop + 14 -- breathing room below the popups
+	-- the shot folder name, then the file name, each with a small caption
+	set y to my nextRow(14)
+	set cap to my addLabelAt(v, "Shot folder name:", 20, y - 3, 600)
+	cap's setFont:(current application's NSFont's systemFontOfSize:11)
+	cap's setTextColor:(current application's NSColor's secondaryLabelColor())
+	cap's setAlignment:(current application's NSTextAlignmentCenter)
+	cap's setAutoresizingMask:2
+	set y to my nextRow(26)
+	set fShotName to current application's NSTextField's labelWithString:""
+	fShotName's setFrame:{{20, y}, {600, 26}}
+	fShotName's setAutoresizingMask:2
+	fShotName's setAlignment:(current application's NSTextAlignmentCenter)
+	fShotName's setFont:(current application's NSFont's monospacedSystemFontOfSize:15 weight:0.4)
+	fShotName's setTextColor:(current application's NSColor's controlAccentColor())
+	fShotName's setSelectable:true
+	fShotName's setLineBreakMode:5
+	v's addSubview:fShotName
+	set y to my nextRow(14)
+	set cap to my addLabelAt(v, "File name:", 20, y - 3, 600)
+	cap's setFont:(current application's NSFont's systemFontOfSize:11)
+	cap's setTextColor:(current application's NSColor's secondaryLabelColor())
+	cap's setAlignment:(current application's NSTextAlignmentCenter)
+	cap's setAutoresizingMask:2
 	set y to my nextRow(32)
 	set fFileName to current application's NSTextField's labelWithString:""
 	fFileName's setFrame:{{20, y}, {600, 30}}
@@ -579,7 +641,7 @@ on buildWindow()
 	cancelBtn's setAutoresizingMask:1 -- buttons stay at the right edge
 	createBtn's setAutoresizingMask:1
 
-	set stretchy to {fClient, fJob, fLocation, parentScroll, tblScroll, hint, fShotSubs, pNumbering, pMode, pNaming}
+	set stretchy to {fClient, fJob, fLocation, level1Scroll, tblScroll, hint, fShotSubs, pNumbering, pFolderMode}
 	if askPhotographer then set end of stretchy to fPhotog
 	repeat with x in stretchy
 		my setHMask(contents of x, 2)
@@ -704,13 +766,13 @@ on refreshBody()
 	else
 		set rPhotog to ""
 	end if
-	set rParentsField to my joinedList(parentList)
-	set rSubField to my joinedList(subList)
-	set rParentsText to my activeParentsText()
+	set rLevel1Field to my joinedList(level1List)
+	set rLevel2Field to my joinedList(level2List)
+	set rLevel1Text to my activeLevel1Text()
 	set rDigits to ((pDigits's indexOfSelectedItem()) as integer) + 1
 	set rCounter to ((pCounter's indexOfSelectedItem()) as integer) + 1
 
-	if not my pathExists(parentPath) then my addProblem("The location folder doesn't exist any more. Choose another.")
+	if not my pathExists(basePath) then my addProblem("The location folder doesn't exist any more. Choose another.")
 	if rJob is "" then
 		my addProblem("Enter a client or a job name.")
 		-- until one is typed, examples show a stand-in (Create Session stays off)
@@ -750,26 +812,26 @@ on refreshBody()
 	end repeat
 
 	if rJob is not "" and rDate is not "" then
-		if my pathExists(parentPath & rSession & "/") then my addProblem("A folder named “" & rSession & "” already exists there. Change the date or the job name.")
+		if my pathExists(basePath & rSession & "/") then my addProblem("A folder named “" & rSession & "” already exists there. Change the date or the job name.")
 	end if
 
-	-- shot groups {parent, shot name, count} from the table
-	set parentNames to {}
+	-- shot groups {level folder, shot name, count} from the table
+	set levelPaths to {}
 	try
-		set parentNames to my activeParentPaths()
+		set levelPaths to my activeLevelPaths()
 	on error msg
 		my addProblem(msg)
 	end try
-	-- the same parent twice (ignoring case, like the disk) would merge into one folder
+	-- the same level folder twice (ignoring case, like the disk) would merge into one folder
 	set seenP to {}
-	repeat with p in parentNames
+	repeat with p in levelPaths
 		if {contents of p} is in seenP then
-			my addProblem("Two parent folders are both named “" & (contents of p) & "”.")
+			my addProblem("Two folders are both named “" & (contents of p) & "”.")
 			exit repeat
 		end if
 		set end of seenP to contents of p
 	end repeat
-	set n to count of parentNames
+	set n to count of levelPaths
 	set rGroups to {}
 	set rGroupLists to {}
 	set rGroupSubs to {}
@@ -795,7 +857,7 @@ on refreshBody()
 	set rShotSubs to {}
 	if shotsOn and rShotSubsField is not "" then
 		try
-			repeat with x in my splitParents(rShotSubsField)
+			repeat with x in my splitList(rShotSubsField)
 				if {contents of x} is not in rShotSubs then set end of rShotSubs to contents of x
 			end repeat
 		on error
@@ -813,16 +875,16 @@ on refreshBody()
 			else
 				set c to count of L
 			end if
-			if nm contains "/" or nm contains ":" then my addProblem("Please don't use / or : in the shot prefix.")
+			if nm contains "/" or nm contains ":" then my addProblem("Please don't use / or : in the shot folder prefix.")
 			set rGroups to {{"", nm, c}}
 			set rGroupLists to {L}
 			set rGroupSubs to {my rowHasSubs(1)}
 		end if
 	else
-		-- one table row per parent path (with subfolders: per parent and subfolder pair)
+		-- one table row per level path (with level 2: per level 1 and level 2 pair)
 		repeat with i from 1 to n
-			set p to item i of parentNames
-			set r to my posOfText(p, rowParents)
+			set p to item i of levelPaths
+			set r to my posOfText(p, rowLevelPaths)
 			if r > 0 and r ≤ (count of rowNames) then
 				set nm to my trim(item r of rowNames)
 				set L to my cleanList(item r of rowLists)
@@ -831,7 +893,7 @@ on refreshBody()
 				else
 					set c to count of L
 				end if
-				if nm contains "/" or nm contains ":" then my addProblem(p & ": please don't use / or : in the shot prefix.")
+				if nm contains "/" or nm contains ":" then my addProblem(p & ": please don't use / or : in the shot folder prefix.")
 				set end of rGroups to {p, nm, c}
 				set end of rGroupLists to L
 				set end of rGroupSubs to my rowHasSubs(r)
@@ -840,9 +902,9 @@ on refreshBody()
 	end if
 	set ng to count of rGroups
 
-	-- shot numbering (only matters with 2+ parents). Menu order: restart (2), per shot name (1),
+	-- shot numbering (only matters with 2+ level folders). Menu order: restart (2), per shot name (1),
 	-- across all (3); the ids are what numberGroups and the saved setting use
-	set numTitles to {"Restart in each parent folder", "Continue per shot prefix", "Continue across all parent folders"}
+	set numTitles to {"Restart in each folder", "Continue per shot prefix", "Continue across all folders"}
 	if ng > 1 then
 		set rNumbering to wantNumbering
 		set titles to {}
@@ -856,12 +918,18 @@ on refreshBody()
 	my fillPopup(pNumbering, titles, my posOf(rNumbering, numberingOrder))
 	pNumbering's setEnabled:(ng > 1)
 
-	-- shot folder naming; mode ids: 1 shot, 2 job_shot, 3 parent_shot, 4 job_parent_shot, 5 date_job_parent_shot, 6 date_job_shot
-	-- with shot folders off and subfolders on, it names the subfolders captured into instead:
-	-- 7 subfolder (KV1/main), 8 parent_subfolder (KV1/KV1_main), so the parent can be in the file name
-	set leafNaming to false
-	if not shotsOn and n > 0 then set leafNaming to ((item 1 of parentNames) contains "/")
+	-- folder naming. levels: how many folder levels lead down to a capture folder (level folders, then shots)
+	set levels to 0
+	if n > 0 then
+		set levels to 1
+		if (item 1 of levelPaths) contains "/" then set levels to 2
+		set p1 to item 1 of levelPaths
+	else
+		set p1 to ""
+	end if
+	set firstShot to ""
 	if ng > 0 then
+		set levels to levels + 1
 		set {p1, n1, s1, c1} to item 1 of my numberGroups(my numberInput(rGroups), rNumbering)
 		set L1 to item 1 of rGroupLists
 		if L1 is {} then
@@ -871,41 +939,45 @@ on refreshBody()
 		else
 			set firstShot to item 1 of L1
 		end if
-		set ids to {1, 2}
-		set labels to {"shot  (" & firstShot & ")", "job_shot  (" & rJob & partSep & firstShot & ")"}
-		if n > 0 then
-			set ids to ids & {3, 4, 5, 6}
-			set labels to labels & {"parent_shot  (" & my pName(p1) & partSep & firstShot & ")", ¬
-				"job_parent_shot  (" & rJob & partSep & my pName(p1) & partSep & firstShot & ")", ¬
-				"date_job_parent_shot  (" & rDate & partSep & rJob & partSep & my pName(p1) & partSep & firstShot & ")", ¬
-				"date_job_shot  (" & rDate & partSep & rJob & partSep & firstShot & ")"}
-		else
-			set end of ids to 6
-			set end of labels to "date_job_shot  (" & rDate & partSep & rJob & partSep & firstShot & ")"
-		end if
-	else if leafNaming then
-		set p1 to item 1 of parentNames
-		set ids to {7, 8}
-		set labels to {"subfolder  (" & my lastComponent(p1) & ")", "parent_subfolder  (" & my pName(p1) & ")"}
-	else
-		set ids to {1}
-		set labels to {"(no numbered shot folders)"}
 	end if
-	set modeIds to ids
-	if leafNaming then
-		set rMode to my pickId(wantLeaf, ids)
+	-- each choice shows the first capture folder's path, with the prefix ticked now
+	set examplePre to ""
+	if wantFolderDate then set examplePre to rDate & partSep
+	if wantFolderJob or wantFolderDate then set examplePre to examplePre & rJob & partSep
+	if levels is 0 then
+		set folderModeIds to {1}
+		set titles to {"(no folders to name)"}
 	else
-		set rMode to my pickId(wantMode, ids)
+		set folderModeIds to {1, 2, 3}
+		if levels is 1 then set folderModeIds to {1, 2} -- one level: dense is the same as balanced
+		set titles to {}
+		repeat with m in folderModeIds
+			set end of titles to item m of {"Simple", "Balanced", "Dense"} & "  (" & my examplePath(p1, firstShot, ng > 0, contents of m, examplePre) & ")"
+		end repeat
 	end if
-	my fillPopup(pMode, labels, my posOf(rMode, ids))
-	pMode's setEnabled:(ng > 0 or leafNaming)
-	-- shot, job_shot, date_job_shot and subfolder leave the parent out of the capture folder
-	-- name, and Capture One's file naming only sees that name
-	set rParentLost to ((ng > 0 and n > 0 and rMode is in {1, 2, 6}) or (leafNaming and rMode is 7))
+	set rFolderMode to my pickId(wantFolderMode, folderModeIds)
+	my fillPopup(pFolderMode, titles, my posOf(rFolderMode, folderModeIds))
+	pFolderMode's setEnabled:(levels > 0)
+	-- the prefix only goes on folders that carry the folders above them, so not with simple naming
+	set prefixed to (rFolderMode > 1)
+	-- the date only goes in front of folder names together with the job: without it, file names
+	-- would get the job ([Name], always first) before the folder's date
+	set folderDateOn to (prefixed and wantFolderDate)
+	set folderJobOn to (prefixed and (wantFolderJob or wantFolderDate))
+	cbFolderJob's setEnabled:(prefixed and not wantFolderDate)
+	cbFolderDate's setEnabled:prefixed
+	if wantFolderJob or wantFolderDate then
+		cbFolderJob's setState:1
+	else
+		cbFolderJob's setState:0
+	end if
+	set rPre to ""
+	if folderDateOn then set rPre to rDate & partSep
+	if folderJobOn then set rPre to rPre & rJob & partSep
 	pDigits's setEnabled:(ng > 0)
 
 	if ng > 0 then
-		set rShotNames to my makeShotNames(rGroups, rDigits, rNumbering, rMode, rJob, rSession)
+		set rShotNames to my makeShotNames(rGroups, rDigits, rNumbering)
 		-- pasted names can repeat; two folders with the same path would merge
 		set seen to {}
 		set dupes to {}
@@ -949,42 +1021,60 @@ on refreshBody()
 	else
 		set rShotBase to {}
 		set rShotSubFlags to {}
-		-- shot folders off: capture into the parent folders, or straight into RAW
-		set rShotNames to parentNames
-		if leafNaming and rMode is 8 then
-			-- KV1/main -> KV1/KV1_main
-			set rShotNames to {}
-			repeat with p in parentNames
-				set end of rShotNames to my parentOf(contents of p) & "/" & my pName(contents of p)
-			end repeat
-		end if
+		-- shot folders off: capture into the (last level) level folders, or straight into RAW
+		set rShotNames to {}
+		repeat with p in levelPaths
+			set end of rShotNames to my diskFolder(contents of p, true, rFolderMode, rPre)
+		end repeat
 	end if
 
-	-- capture file naming, previewed with the first numbered folder; hides options that would
-	-- repeat the job (and date) already in the shot folder name
-	if rShotNames is {} then
-		set previewFolder to rawName
+	-- file names: [Name]_[Destination Folder Name]_[Counter]. Capture One only sees the name of
+	-- the folder captured into, so [Name] holds what that name is missing: date, job, level folders
+	set rFileMode to wantFileMode
+	if rFileMode is 2 and folderDateOn then set rFileMode to 3 -- a date in the folder name is in the file name too
+	-- file prefix: typed, or client + job
+	set rFilePrefix to my spacesToDashes(my trim(wantFilePrefix))
+	if rFilePrefix is "" then set rFilePrefix to rJob
+	fFilePrefix's setPlaceholderString:rJob
+	fFilePrefix's setHidden:(wantFileMode is not 1)
+	if wantFileMode is 1 and (rFilePrefix contains "/" or rFilePrefix contains ":") then my addProblem("Please don't use / or : in the file prefix.")
+	set nameParts to {}
+	set rLostNote to ""
+	if rFileMode is 1 then
+		set end of nameParts to rFilePrefix
+		if (count of rShotNames) > 1 then set rLostNote to "Note: simple file names are only unique when the counter isn't reset when switching folders." & return & "Check this in Capture One's capture naming."
 	else
-		set previewFolder to my lastComponent(item 1 of rShotNames)
+		if rFileMode is 3 and not folderDateOn then set end of nameParts to rDate
+		if not folderJobOn then set end of nameParts to rJob
+		if rFolderMode is 1 and n > 0 then
+			-- simple: the level folders above each capture folder; [Name] can only hold the ones all share
+			set ups to {}
+			if ng > 0 then
+				repeat with g in rGroups
+					set end of ups to item 1 of g
+				end repeat
+			else
+				repeat with p in levelPaths
+					set end of ups to my level1Of(contents of p)
+				end repeat
+			end if
+			set {common, lost} to my commonLevel1(ups)
+			if common is not "" then set end of nameParts to my pName(common)
+			if lost is not "" then set rLostNote to "Note: with simple folder naming, file names leave out the level 1 folders " & lost & "." & return & "Pick Balanced or Dense folder naming to keep them in."
+		end if
 	end if
-	set firstCounter to my pad(1, rCounter)
-	set ids to {1, 2, 6}
-	set labels to {"folder  (" & previewFolder & partSep & firstCounter & ")", ¬
-		"job  (" & rJob & partSep & firstCounter & ")", ¬
-		"date_job  (" & rSession & partSep & firstCounter & ")"}
-	if not (ng > 0 and rMode is in {2, 4, 5, 6}) then
-		set ids to ids & {3, 4}
-		set labels to labels & {"job_folder  (" & rJob & partSep & previewFolder & partSep & firstCounter & ")", ¬
-			"date_job_folder  (" & rSession & partSep & previewFolder & partSep & firstCounter & ")"}
+	set oldTID to AppleScript's text item delimiters
+	set AppleScript's text item delimiters to partSep
+	set rCaptureName to nameParts as text
+	set AppleScript's text item delimiters to oldTID
+	set cnt to "[" & rCounter & " Digit Counter]"
+	if rFileMode is 1 then
+		set rCaptureFormat to "[Name]" & partSep & cnt
+	else if rCaptureName is "" then
+		set rCaptureFormat to "[Destination Folder Name]" & partSep & cnt
+	else
+		set rCaptureFormat to "[Name]" & partSep & "[Destination Folder Name]" & partSep & cnt
 	end if
-	-- date in front of the folder name, unless the shot folder name already starts with the date
-	if not (ng > 0 and rMode is in {5, 6}) then
-		set end of ids to 5
-		set end of labels to "date_folder  (" & rDate & partSep & previewFolder & partSep & firstCounter & ")"
-	end if
-	set namingIds to ids
-	set rNaming to my pickId(wantNaming, ids)
-	my fillPopup(pNaming, labels, my posOf(rNaming, ids))
 
 	-- the file name, large: first capture in the first shot folder
 	if rShotNames is {} then
@@ -992,15 +1082,18 @@ on refreshBody()
 	else
 		set ffShot to my lastComponent(item 1 of rShotNames)
 	end if
-	set ffC to my pad(1, rCounter)
-	set ffName to item rNaming of {ffShot & partSep & ffC, rJob & partSep & ffC, rJob & partSep & ffShot & partSep & ffC, rSession & partSep & ffShot & partSep & ffC, rDate & partSep & ffShot & partSep & ffC, rSession & partSep & ffC}
+	set ffName to ffShot & partSep & my pad(1, rCounter)
+	if rFileMode is 1 then set ffName to my pad(1, rCounter)
+	if rCaptureName is not "" then set ffName to rCaptureName & partSep & ffName
+	fShotName's setStringValue:ffShot
+	fShotName's setToolTip:ffShot
 	fFileName's setStringValue:ffName
 	fFileName's setToolTip:ffName
 	my fitWidth()
 
 	if problem is "" then
 		my setPreviewWrap(false)
-		set summ to my summaryText(rSession, parentPath, rShotNames, rNaming, rJob, rCounter, rPhotog)
+		set summ to my summaryText(rSession, basePath, rShotNames, rPhotog)
 		set warn to my sameNameWarning()
 		if warn is "" then
 			previewView's setString:summ
@@ -1024,7 +1117,7 @@ on refreshBody()
 	createBtn's setEnabled:(problem is "")
 	if (tbl's editedRow()) as integer < 0 then
 		my sizeColumns() -- not while a cell is being typed in
-		my fitWidth() -- the level 1 parents may need a wider table (it refits the columns)
+		my fitWidth() -- the level 1 folders may need a wider table (it refits the columns)
 	end if
 	my updateSepTips()
 end refreshBody
@@ -1084,18 +1177,18 @@ on sepChanged:sender
 	my refresh()
 end sepChanged:
 
--- the level 1 parent folder list, or "" while the checkbox is off
-on activeParentsText()
-	if (cbParents's state()) as integer is 1 then return my joinedList(parentList)
+-- the level 1 folder list, or "" while the checkbox is off
+on activeLevel1Text()
+	if (cbLevel1's state()) as integer is 1 then return my joinedList(level1List)
 	return ""
-end activeParentsText
+end activeLevel1Text
 
--- Relative parent paths inside RAW: {"Studio", "Rooftop"}, or with subfolders every
+-- Relative level paths inside RAW: {"Studio", "Rooftop"}, or with level 2 every
 -- combination {"Studio/DAY1", "Studio/DAY2", "Rooftop/DAY1", ...}. Errors on invalid names.
-on activeParentPaths()
-	set l1 to my splitParents(my activeParentsText())
-	if l1 is {} or not subOn then return l1
-	set l2 to my splitParents(my joinedList(subList))
+on activeLevelPaths()
+	set l1 to my splitList(my activeLevel1Text())
+	if l1 is {} or not level2On then return l1
+	set l2 to my splitList(my joinedList(level2List))
 	if l2 is {} then return l1
 	set out to {}
 	repeat with a in l1
@@ -1104,7 +1197,7 @@ on activeParentPaths()
 		end repeat
 	end repeat
 	return out
-end activeParentPaths
+end activeLevelPaths
 
 -- "Studio/DAY1" as it appears inside a folder or file name: "Studio_DAY1"
 on pName(p)
@@ -1137,86 +1230,86 @@ on splitSaved(t)
 	return out
 end splitSaved
 
--- parent and subfolder lists from the saved comma text (kept while the checkboxes are off)
-on loadParentList()
-	set parentList to my splitSaved(my readPref("parentstext", my readPref("parents", "")))
-	set subList to my splitSaved(my readPref("subtext", ""))
-	set subOn to (my readPref("subfolders", "0") is "1")
-end loadParentList
+-- level folder and level 2 lists from the saved comma text (kept while the checkboxes are off)
+on loadLevelLists()
+	set level1List to my splitSaved(my readPref("level1text", my readPref("level1", "")))
+	set level2List to my splitSaved(my readPref("level2text", ""))
+	set level2On to (my readPref("level2", "0") is "1")
+end loadLevelLists
 
--- rows in the parent area: level 1 fields on the left; on the right the Subfolders
+-- rows in the folder area: level 1 fields on the left; on the right the Level 2
 -- checkbox with the level 2 fields below it
-on parentRows()
-	set n1 to count of parentList
+on levelRows()
+	set n1 to count of level1List
 	set n2 to 1
-	if subOn then set n2 to 1 + (count of subList)
+	if level2On then set n2 to 1 + (count of level2List)
 	if n2 > n1 then return n2
 	return n1
-end parentRows
+end levelRows
 
-on visibleParentRows()
-	set n to my parentRows()
+on visibleLevelRows()
+	set n to my levelRows()
 	if n > 5 then return 5
 	return n
-end visibleParentRows
+end visibleLevelRows
 
--- Redraws both parent columns, resizing the window to fit;
+-- Redraws both level folder columns, resizing the window to fit;
 -- focusTag > 0 puts the cursor in that field (101… level 1, 201… level 2)
-on rebuildParentRows(focusTag)
+on rebuildLevelRows(focusTag)
 	win's makeFirstResponder:(missing value) -- finish any typing in a field about to be removed
 	-- how far the list is scrolled down from its top, to put it back there afterwards
 	-- (the view isn't flipped, so left alone it would show the bottom rows)
-	set {{bx, |by|}, {bw, bh}} to parentScroll's contentView()'s |bounds|()
-	set {{dx, dy}, {dw, oldDocH}} to parentDoc's frame()
+	set {{bx, |by|}, {bw, bh}} to level1Scroll's contentView()'s |bounds|()
+	set {{dx, dy}, {dw, oldDocH}} to level1Doc's frame()
 	set topOff to oldDocH - (|by| + bh)
 	if topOff < 0 then set topOff to 0
-	set areaH to (my visibleParentRows()) * 30
-	set {{sx, sy}, {sw, sh}} to parentScroll's frame()
+	set areaH to (my visibleLevelRows()) * 30
+	set {{sx, sy}, {sw, sh}} to level1Scroll's frame()
 	set delta to areaH - sh
 	if delta is not 0 then
 		set {{fx, fy}, {fw, fh}} to win's frame()
 		win's setFrame:{{fx, fy - delta}, {fw, fh + delta}} display:true
 		my lockHeight()
 	end if
-	set isOn to ((cbParents's state()) as integer is 1)
-	set docH to (my parentRows()) * 30
+	set isOn to ((cbLevel1's state()) as integer is 1)
+	set docH to (my levelRows()) * 30
 	if docH < areaH then set docH to areaH
-	parentDoc's setSubviews:{}
-	my parentColumns()
-	parentDoc's setFrameSize:{(parentScroll's contentSize()'s width) as integer, docH}
+	level1Doc's setSubviews:{}
+	my levelColumns()
+	level1Doc's setFrameSize:{(level1Scroll's contentSize()'s width) as integer, docH}
 
 	-- left column: level 1
-	set n to count of parentList
+	set n to count of level1List
 	repeat with i from 1 to n
-		my addFolderRow(item i of parentList, 3, docH - 27 - (i - 1) * 30, 100 + i, i, n, isOn, "addParent:", "removeParent:", "e.g. Studio, Day 1")
+		my addFolderRow(item i of level1List, 3, docH - 27 - (i - 1) * 30, 100 + i, i, n, isOn, "addLevel1:", "removeLevel1:", "e.g. Studio, Day 1")
 	end repeat
 
-	-- right column: Subfolders checkbox, then level 2
-	set cbSub to current application's NSButton's checkboxWithTitle:"Subfolders" target:me action:"subToggled:"
-	cbSub's setFrame:{{pdRightX - 1, docH - 26}, {200, 22}}
-	if subOn then cbSub's setState:1
-	cbSub's setEnabled:isOn
-	cbSub's setToolTip:"A second folder level inside every parent folder, e.g. Studio/DAY1"
-	parentDoc's addSubview:cbSub
-	if subOn then
-		set n to count of subList
+	-- right column: Level 2 checkbox, then level 2
+	set cbLevel2 to current application's NSButton's checkboxWithTitle:"Level 2 folders" target:me action:"level2Toggled:"
+	cbLevel2's setFrame:{{pdRightX - 1, docH - 26}, {200, 22}}
+	if level2On then cbLevel2's setState:1
+	cbLevel2's setEnabled:isOn
+	cbLevel2's setToolTip:"A second folder level inside every level 1 folder, e.g. Studio/DAY1"
+	level1Doc's addSubview:cbLevel2
+	if level2On then
+		set n to count of level2List
 		repeat with i from 1 to n
-			my addFolderRow(item i of subList, pdRightX, docH - 27 - i * 30, 200 + i, i, n, isOn, "addSub:", "removeSub:", "e.g. DAY1, Look 1")
+			my addFolderRow(item i of level2List, pdRightX, docH - 27 - i * 30, 200 + i, i, n, isOn, "addLevel2:", "removeLevel2:", "e.g. DAY1, Look 1")
 		end repeat
 	end if
 
 	set scrollY to docH - areaH - topOff
 	if scrollY < 0 then set scrollY to 0
-	parentDoc's scrollPoint:{0, scrollY}
+	level1Doc's scrollPoint:{0, scrollY}
 
 	if focusTag > 0 and isOn then
-		set f to parentDoc's viewWithTag:focusTag
+		set f to level1Doc's viewWithTag:focusTag
 		if f is not missing value then
 			f's scrollRectToVisible:(f's |bounds|())
 			win's makeFirstResponder:f
 		end if
 	end if
-end rebuildParentRows
+end rebuildLevelRows
 
 -- Spreads the five session folder fields over the form's width, equally wide
 on layoutFolders()
@@ -1230,28 +1323,28 @@ on layoutFolders()
 	end repeat
 end layoutFolders
 
--- Splits the parent area's width into the parent and subfolder columns:
+-- Splits the folder area's width into the level folder and level 2 columns:
 -- each a field (up to 360 wide) with its + and − buttons
-on parentColumns()
-	set w to (parentScroll's contentSize()'s width) as integer
+on levelColumns()
+	set w to (level1Scroll's contentSize()'s width) as integer
 	set colW to (w - 14) div 2
 	set fw to colW - 56
 	if fw < 120 then set fw to 120
 	if fw > 360 then set fw to 360
 	set pdFieldW to fw
 	set pdRightX to 3 + fw + 56 + 11
-end parentColumns
+end levelColumns
 
 -- After a width change: moves and widens the fields and buttons already there,
 -- without rebuilding them (that would end any typing in them)
-on layoutParentDoc()
-	if parentDoc is missing value then return
+on layoutLevelDoc()
+	if level1Doc is missing value then return
 	set {oldW, oldX} to {pdFieldW, pdRightX}
-	my parentColumns()
-	set {{dx, dy}, {dw, dh}} to parentDoc's frame()
-	parentDoc's setFrameSize:{(parentScroll's contentSize()'s width) as integer, dh}
+	my levelColumns()
+	set {{dx, dy}, {dw, dh}} to level1Doc's frame()
+	level1Doc's setFrameSize:{(level1Scroll's contentSize()'s width) as integer, dh}
 	if oldW is pdFieldW and oldX is pdRightX then return
-	repeat with sub in (parentDoc's subviews() as list)
+	repeat with sub in (level1Doc's subviews() as list)
 		set {{sx, sy}, {sw, sh}} to (contents of sub)'s frame()
 		if sx < oldX - 5 then
 			set {colOld, colNew} to {3, 3}
@@ -1265,7 +1358,7 @@ on layoutParentDoc()
 			((contents of sub)'s setFrameSize:{pdFieldW, sh})
 		end if
 	end repeat
-end layoutParentDoc
+end layoutLevelDoc
 
 -- one field with + and − (− only when there is more than one row)
 on addFolderRow(t, x, ry, fieldTag, i, n, isOn, addAction, removeAction, hint)
@@ -1273,16 +1366,16 @@ on addFolderRow(t, x, ry, fieldTag, i, n, isOn, addAction, removeAction, hint)
 	f's setFrame:{{x, ry}, {pdFieldW, 24}}
 	f's setTag:fieldTag
 	f's setDelegate:me
-	-- (no placeholder text in parent and subfolder fields)
+	-- (no placeholder text in level folder and level 2 fields)
 	f's setEnabled:isOn
-	parentDoc's addSubview:f
+	level1Doc's addSubview:f
 	set b to current application's NSButton's buttonWithImage:(current application's NSImage's imageNamed:"NSAddTemplate") target:me action:addAction
 	b's setBezelStyle:10
 	b's setFrame:{{x + pdFieldW + 5, ry}, {24, 24}}
 	b's setTag:i
 	b's setEnabled:isOn
 	b's setToolTip:"Add a folder below"
-	parentDoc's addSubview:b
+	level1Doc's addSubview:b
 	if n > 1 then
 		set b to current application's NSButton's buttonWithImage:(current application's NSImage's imageNamed:"NSRemoveTemplate") target:me action:removeAction
 		b's setBezelStyle:10
@@ -1290,7 +1383,7 @@ on addFolderRow(t, x, ry, fieldTag, i, n, isOn, addAction, removeAction, hint)
 		b's setTag:i
 		b's setEnabled:isOn
 		b's setToolTip:"Remove this folder"
-		parentDoc's addSubview:b
+		level1Doc's addSubview:b
 	end if
 end addFolderRow
 
@@ -1307,42 +1400,42 @@ on removeAt(theList, i)
 	return (items 1 thru (i - 1) of theList) & (items (i + 1) thru -1 of theList)
 end removeAt
 
-on parentsChanged(focusTag)
-	my rebuildParentRows(focusTag)
+on levelsChanged(focusTag)
+	my rebuildLevelRows(focusTag)
 	my syncRows()
 	my refresh()
-end parentsChanged
+end levelsChanged
 
-on addParent:sender
+on addLevel1:sender
 	set i to (sender's tag()) as integer
-	set parentList to my insertAfter(parentList, i)
-	my parentsChanged(101 + i)
-end addParent:
+	set level1List to my insertAfter(level1List, i)
+	my levelsChanged(101 + i)
+end addLevel1:
 
-on removeParent:sender
-	set parentList to my removeAt(parentList, (sender's tag()) as integer)
-	my parentsChanged(0)
-end removeParent:
+on removeLevel1:sender
+	set level1List to my removeAt(level1List, (sender's tag()) as integer)
+	my levelsChanged(0)
+end removeLevel1:
 
-on addSub:sender
+on addLevel2:sender
 	set i to (sender's tag()) as integer
-	set subList to my insertAfter(subList, i)
-	my parentsChanged(201 + i)
-end addSub:
+	set level2List to my insertAfter(level2List, i)
+	my levelsChanged(201 + i)
+end addLevel2:
 
-on removeSub:sender
-	set subList to my removeAt(subList, (sender's tag()) as integer)
-	my parentsChanged(0)
-end removeSub:
+on removeLevel2:sender
+	set level2List to my removeAt(level2List, (sender's tag()) as integer)
+	my levelsChanged(0)
+end removeLevel2:
 
-on subToggled:sender
-	set subOn to ((sender's state()) as integer is 1)
-	if subOn then
-		my parentsChanged(201)
+on level2Toggled:sender
+	set level2On to ((sender's state()) as integer is 1)
+	if level2On then
+		my levelsChanged(201)
 	else
-		my parentsChanged(0)
+		my levelsChanged(0)
 	end if
-end subToggled:
+end level2Toggled:
 
 on prelightToggled:sender
 	set isOn to ((cbPrelight's state()) as integer is 1)
@@ -1355,46 +1448,46 @@ on shotsToggled:sender
 	my refresh()
 end shotsToggled:
 
-on parentsToggled:sender
-	if (cbParents's state()) as integer is 1 then
-		my parentsChanged(101)
+on level1Toggled:sender
+	if (cbLevel1's state()) as integer is 1 then
+		my levelsChanged(101)
 	else
-		my parentsChanged(0)
+		my levelsChanged(0)
 	end if
-end parentsToggled:
+end level1Toggled:
 
--- Rebuilds the table rows when the parent folders change; keeps what was typed per row
+-- Rebuilds the table rows when the level folders change; keeps what was typed per row
 on syncRows()
 	try
-		set names to my activeParentPaths()
+		set names to my activeLevelPaths()
 	on error
 		return -- invalid names: refresh shows the problem, keep the rows
 	end try
 	my syncTop(names)
 	set names to my sortedRows(names)
-	-- table rows are keyed by the parent path: "Studio", or "Studio/DAY1" with subfolders
+	-- table rows are keyed by the level path: "Studio", or "Studio/DAY1" with level 2
 	if (count of names) is 0 then set names to {""}
 	considering case
-		if names is rowParents then return
+		if names is rowLevelPaths then return
 	end considering
 	set newNames to {}
 	set newCounts to {}
 	set newLists to {}
 	set newSubs to {}
 	set newOwn to {}
-	-- each row keeps the data of the old row with the same parent, so removing a parent
+	-- each row keeps the data of the old row with the same level folder, so removing a level folder
 	-- doesn't hand its prefix and pasted list to the next one. src: old row per new row, 0 = new
 	set oldN to count of rowNames
 	set src to {}
 	set claimed to {}
 	repeat with i from 1 to count of names
-		set r to my posOfText(item i of names, rowParents)
+		set r to my posOfText(item i of names, rowLevelPaths)
 		if r > oldN or r is in claimed then set r to 0
 		set end of src to r
 		if r > 0 then set end of claimed to r
 	end repeat
-	-- no old row with that name: the parent was renamed (every keystroke does this) or the
-	-- checkbox was switched, so it keeps the row at its position unless another parent owns it
+	-- no old row with that name: the level folder was renamed (every keystroke does this) or the
+	-- checkbox was switched, so it keeps the row at its position unless another level folder owns it
 	repeat with i from 1 to count of names
 		if item i of src is 0 and i ≤ oldN and i is not in claimed then
 			set item i of src to i
@@ -1439,7 +1532,7 @@ on syncRows()
 		set end of newNames to nm
 		set end of newCounts to c
 	end repeat
-	set rowParents to names
+	set rowLevelPaths to names
 	set rowNames to newNames
 	set rowCounts to newCounts
 	set rowLists to newLists
@@ -1449,12 +1542,12 @@ on syncRows()
 	my fitTable() -- taller or shorter, so every row shows
 end syncRows
 
--- With two parent levels, shows the level 1 parent of each row in its own column
--- and calls the direct parent column Subfolder; with one level that column is hidden
+-- With two levels, shows the level 1 folder of each row in its own column
+-- and calls the level 2 column Level 2; with one level that column is hidden
 on syncTop(paths)
 	set tops to {}
 	repeat with p in paths
-		set k to my parentOf(contents of p)
+		set k to my level1Of(contents of p)
 		if k is not "" and my posOfText(k, tops) is 0 then set end of tops to k
 	end repeat
 	set oldTID to AppleScript's text item delimiters
@@ -1462,24 +1555,24 @@ on syncTop(paths)
 	set t to tops as text
 	set AppleScript's text item delimiters to oldTID
 	considering case
-		if t is rowTop then return
+		if t is rowLevel1 then return
 	end considering
-	set rowTop to t
-	(tbl's tableColumnWithIdentifier:"top")'s setHidden:(t is "")
+	set rowLevel1 to t
+	(tbl's tableColumnWithIdentifier:"level1")'s setHidden:(t is "")
 	if t is "" then
-		(tbl's tableColumnWithIdentifier:"parent")'s headerCell()'s setStringValue:"Parent"
+		(tbl's tableColumnWithIdentifier:"level2")'s headerCell()'s setStringValue:"Level 1"
 	else
-		(tbl's tableColumnWithIdentifier:"parent")'s headerCell()'s setStringValue:"Subfolder"
+		(tbl's tableColumnWithIdentifier:"level2")'s headerCell()'s setStringValue:"Level 2"
 	end if
 	my showSortIndicator()
 	tbl's headerView()'s setNeedsDisplay:true
 	tbl's reloadData()
 end syncTop
 
--- The table's row order: by parent (as the parents are listed), or with "sub" by subfolder,
--- each subfolder's parents in their listed order. Only the table; folders are made in parent order.
+-- The table's row order: by level folder (as the level folders are listed), or with "level2" by level 2,
+-- each level 2's level folders in their listed order. Only the table; folders are made in level folder order.
 on sortedRows(paths)
-	if rowSort is not "sub" or rowTop is "" then return paths
+	if rowSort is not "level2" or rowLevel1 is "" then return paths
 	set keys to {}
 	repeat with p in paths
 		set k to my lastComponent(contents of p)
@@ -1496,27 +1589,27 @@ end sortedRows
 
 -- the arrow in the header of the column the rows are sorted by (with two levels only)
 on showSortIndicator()
-	set colTop to tbl's tableColumnWithIdentifier:"top"
-	set colSub to tbl's tableColumnWithIdentifier:"parent"
-	tbl's setIndicatorImage:(missing value) inTableColumn:colTop
-	tbl's setIndicatorImage:(missing value) inTableColumn:colSub
-	if rowTop is "" then return
+	set colLevel1 to tbl's tableColumnWithIdentifier:"level1"
+	set colLevel2 to tbl's tableColumnWithIdentifier:"level2"
+	tbl's setIndicatorImage:(missing value) inTableColumn:colLevel1
+	tbl's setIndicatorImage:(missing value) inTableColumn:colLevel2
+	if rowLevel1 is "" then return
 	set img to current application's NSImage's imageNamed:"NSAscendingSortIndicator"
-	if rowSort is "sub" then
-		tbl's setIndicatorImage:img inTableColumn:colSub
+	if rowSort is "level2" then
+		tbl's setIndicatorImage:img inTableColumn:colLevel2
 	else
-		tbl's setIndicatorImage:img inTableColumn:colTop
+		tbl's setIndicatorImage:img inTableColumn:colLevel1
 	end if
 end showSortIndicator
 
--- clicking the Parent or Subfolder header sorts the rows by that column
+-- clicking the Level 1 or Level 2 header sorts the rows by that column
 on tableView:tv didClickTableColumn:col
-	if rowTop is "" then return -- one level: nothing to sort by
+	if rowLevel1 is "" then return -- one level: nothing to sort by
 	set cid to (col's identifier()) as text
-	if cid is "top" then
-		set newSort to "parent"
-	else if cid is "parent" then
-		set newSort to "sub"
+	if cid is "level1" then
+		set newSort to "level1"
+	else if cid is "level2" then
+		set newSort to "level2"
 	else
 		return
 	end if
@@ -1568,6 +1661,8 @@ on controlTextDidChange:aNotification
 			end repeat
 			tbl's reloadData()
 		end if
+	else if (obj's tag()) as integer is 302 then
+		set wantFilePrefix to (obj's stringValue()) as text
 	else if (obj's tag()) as integer is 301 then
 		-- shot prefix for every row the table hasn't given its own
 		set t to my trim((obj's stringValue()) as text)
@@ -1578,14 +1673,14 @@ on controlTextDidChange:aNotification
 			tbl's reloadData()
 		end if
 	else if (obj's tag()) as integer > 200 then
-		-- a subfolder field
+		-- a level 2 field
 		set i to ((obj's tag()) as integer) - 200
-		if i ≤ (count of subList) then set item i of subList to (obj's stringValue()) as text
+		if i ≤ (count of level2List) then set item i of level2List to (obj's stringValue()) as text
 		my syncRows()
 	else if (obj's tag()) as integer > 100 then
-		-- a parent folder field
+		-- a level folder field
 		set i to ((obj's tag()) as integer) - 100
-		if i ≤ (count of parentList) then set item i of parentList to (obj's stringValue()) as text
+		if i ≤ (count of level1List) then set item i of level1List to (obj's stringValue()) as text
 		my syncRows()
 	end if
 	my refresh()
@@ -1594,16 +1689,18 @@ end controlTextDidChange:
 on popupChanged:sender
 	set i to ((sender's indexOfSelectedItem()) as integer) + 1
 	if (sender's isEqual:pNumbering) as boolean then set wantNumbering to item i of numberingOrder
-	if (sender's isEqual:pMode) as boolean then
-		if item i of modeIds ≥ 7 then
-			set wantLeaf to item i of modeIds
-		else
-			set wantMode to item i of modeIds
-		end if
-	end if
-	if (sender's isEqual:pNaming) as boolean then set wantNaming to item i of namingIds
+	if (sender's isEqual:pFolderMode) as boolean then set wantFolderMode to item i of folderModeIds
+	if (sender's isEqual:pFileMode) as boolean then set wantFileMode to i
 	my refresh()
 end popupChanged:
+
+-- the folder prefix checkboxes
+on namingToggled:sender
+	set isOn to ((sender's state()) as integer is 1)
+	if (sender's isEqual:cbFolderJob) as boolean then set wantFolderJob to isOn
+	if (sender's isEqual:cbFolderDate) as boolean then set wantFolderDate to isOn
+	my refresh()
+end namingToggled:
 
 on chooseLocation:sender
 	set op to current application's NSOpenPanel's openPanel()
@@ -1612,14 +1709,14 @@ on chooseLocation:sender
 	op's setCanCreateDirectories:true
 	op's setPrompt:"Choose"
 	op's setMessage:"Where should the session be created?"
-	op's setDirectoryURL:(current application's NSURL's fileURLWithPath:parentPath)
+	op's setDirectoryURL:(current application's NSURL's fileURLWithPath:basePath)
 	win's setLevel:0 -- let the panel come in front
 	set r to (op's runModal()) as integer
 	win's setLevel:3
 	if r is 1 then
 		set p to (op's |URL|()'s |path|()) as text
 		if p does not end with "/" then set p to p & "/"
-		set parentPath to p
+		set basePath to p
 		my showLocation()
 		my refresh()
 	end if
@@ -1640,24 +1737,24 @@ on tableClicked:sender
 		set rows to my selectedRows()
 		if (r + 1) is not in rows then set rows to {r + 1}
 		my openPaste(rows)
-	else if (col's identifier()) as text is not in {"top", "parent"} and my canEdit(col, r + 1) then
+	else if (col's identifier()) as text is not in {"level1", "level2"} and my canEdit(col, r + 1) then
 		tbl's editColumn:c row:r withEvent:(missing value) |select|:true
 	end if
 end tableClicked:
 
--- Fits the parent columns, Shots and List to their widest text; Shot prefix gets the rest of the width
+-- Fits the level folder columns, Shots and List to their widest text; Shot folder prefix gets the rest of the width
 on sizeColumns()
 	set cols to tbl's tableColumns() as list
 	set avail to ((tbl's enclosingScrollView()'s contentSize())'s width) as real
 	set gap to ((tbl's intercellSpacing())'s width) as real
-	set topOn to (rowTop is not "")
+	set level1On to (rowLevel1 is not "")
 	set wants to {}
 	repeat with col in items 1 thru 5 of cols
 		set f to (col's dataCell()'s |font|())
 		set attrs to (current application's NSDictionary's dictionaryWithObject:f forKey:(current application's NSFontAttributeName))
 		set w to ((((current application's NSString's stringWithString:((col's headerCell()'s stringValue()) as text))'s sizeWithAttributes:attrs)'s width) as real) + 12
-		-- the sortable Parent and Subfolder headers also hold the sort arrow
-		if topOn and (col's identifier()) as text is in {"top", "parent"} then set w to w + 16
+		-- the sortable Level 1 and Level 2 headers also hold the sort arrow
+		if level1On and (col's identifier()) as text is in {"level1", "level2"} then set w to w + 16
 		repeat with r from 0 to (count of rowNames) - 1
 			set t to (my tableView:tbl objectValueForTableColumn:col row:r) as text
 			set cw to ((((current application's NSString's stringWithString:t)'s sizeWithAttributes:attrs)'s width) as real) + 10
@@ -1670,11 +1767,11 @@ on sizeColumns()
 	set wL to my clampInt(wL, 60, 100)
 	set wS to 75 -- Subfolders: fixed, fits its header
 	set nGaps to 5
-	if topOn then set nGaps to 6
+	if level1On then set nGaps to 6
 	set spare to avail - wC - wL - wS - nGaps * gap
-	-- the window width at which the level 1 parents (up to 300) fit beside a 120 prefix
+	-- the window width at which the level 1 folders (up to 300) fit beside a 120 prefix
 	set tblNeedW to 0
-	if topOn then
+	if level1On then
 		set wantT to wT
 		if wantT > 300 then set wantT to 300
 		set wantP to wP
@@ -1682,10 +1779,10 @@ on sizeColumns()
 		set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
 		set tblNeedW to (cw + (wantT + wantP + 120 - spare)) as integer
 	end if
-	-- the parents get what they need, but leave the prefix at least 120 (80 with two levels);
-	-- with two levels the subfolder comes first and the level 1 list, the same on every row,
+	-- the level folders get what they need, but leave the prefix at least 120 (80 with two levels);
+	-- with two levels the level 2 comes first and the level 1 list, the same on every row,
 	-- takes what is left (it ends in … when it doesn't fit)
-	if topOn then
+	if level1On then
 		if wP > spare / 3 then set wP to spare / 3
 		if wP < 50 then set wP to 50
 		set room to spare - wP - 80
@@ -1713,7 +1810,7 @@ on canEdit(col, i)
 end canEdit
 
 on tableView:tv shouldEditTableColumn:col row:r
-	if (col's identifier()) as text is in {"top", "parent"} then return false
+	if (col's identifier()) as text is in {"level1", "level2"} then return false
 	return my canEdit(col, (r as integer) + 1)
 end tableView:shouldEditTableColumn:row:
 
@@ -1740,11 +1837,11 @@ on tableView:tv objectValueForTableColumn:col row:r
 	set i to (r as integer) + 1
 	if i > (count of rowNames) then return ""
 	set cid to (col's identifier()) as text
-	if cid is "top" then return my parentOf(item i of rowParents)
-	if cid is "parent" then
-		set p to item i of rowParents
-		if p is "" then return rawName -- no parent folders: shots go straight into RAW
-		return my lastComponent(p) -- direct parent only; the level 1 parent has its own column
+	if cid is "level1" then return my level1Of(item i of rowLevelPaths)
+	if cid is "level2" then
+		set p to item i of rowLevelPaths
+		if p is "" then return rawName -- no level folders: shots go straight into RAW
+		return my lastComponent(p) -- direct level folder only; the level 1 folder has its own column
 	else if cid is "name" then
 		return item i of rowNames
 	else if cid is "subs" then
@@ -1821,7 +1918,7 @@ on openPaste(rows)
 	end repeat
 	win's makeFirstResponder:(missing value) -- commits a table cell still being edited
 	set nsApp to current application's NSApplication's sharedApplication()
-	set pp to item i of rowParents -- "Studio/DAY1" with subfolders
+	set pp to item i of rowLevelPaths -- "Studio/DAY1" with level 2
 	if pp is "" then set pp to rawName
 	set pw to current application's NSPanel's alloc()'s initWithContentRect:{{0, 0}, {440, 380}} styleMask:1 backing:2 defer:false
 	if (count of rows) is (count of rowNames) and (count of rows) > 1 then
@@ -1926,20 +2023,21 @@ on releaseWindow()
 		end if
 		if win is not missing value then win's setDelegate:(missing value)
 	end try
-	set {win, cbParents, formView} to {missing value, missing value, missing value}
-	set {tbl, tblScroll, rowTop} to {missing value, missing value, ""}
+	set {win, cbLevel1, formView} to {missing value, missing value, missing value}
+	set {tbl, tblScroll, rowLevel1} to {missing value, missing value, ""}
 	set {rbAppend, rbReplace} to {missing value, missing value}
 	set {btnPaste, pastePanel, pasteView} to {missing value, missing value, missing value}
-	set {fClient, cbSub, fAllCounts, fFileName} to {missing value, missing value, missing value, missing value}
+	set {fClient, cbLevel2, fAllCounts, fFileName, fShotName} to {missing value, missing value, missing value, missing value, missing value}
 	set fAllPrefix to missing value
 	set {pdFieldW, pdRightX} to {165, 235}
-	set {fLocation, fJob, fDateFmt, fDate, fPhotog, parentScroll, parentDoc} to {missing value, missing value, missing value, missing value, missing value, missing value, missing value}
+	set {fLocation, fJob, fDateFmt, fDate, fPhotog, level1Scroll, level1Doc} to {missing value, missing value, missing value, missing value, missing value, missing value, missing value}
 	set {rbSep, fFolders, cbShots, cbPrelight, fPrelight, fShotSubs} to {{}, {}, missing value, missing value, missing value, missing value}
 	try
 		if previewPanel is not missing value then previewPanel's orderOut:(missing value)
 	end try
 	set {previewPanel, fStatus} to {missing value, missing value}
-	set {pNumbering, pMode, pDigits, pNaming, pCounter, previewView, createBtn} to {missing value, missing value, missing value, missing value, missing value, missing value, missing value}
+	set {pNumbering, pFolderMode, pDigits, pCounter, previewView, createBtn} to {missing value, missing value, missing value, missing value, missing value, missing value}
+	set {cbFolderJob, cbFolderDate, pFileMode, fFilePrefix} to {missing value, missing value, missing value, missing value}
 end releaseWindow
 
 ---------- WINDOW HELPERS ----------
@@ -1995,6 +2093,14 @@ on addPopup(v, x, y, wd)
 	return p
 end addPopup
 
+on addCheck(v, t, x, y, wd, isOn)
+	set b to current application's NSButton's checkboxWithTitle:t target:me action:"namingToggled:"
+	b's setFrame:{{x, y + 1}, {wd, 22}}
+	if isOn then b's setState:1
+	v's addSubview:b
+	return b
+end addCheck
+
 on addButton(v, t, x, wd, tg)
 	set b to current application's NSButton's buttonWithTitle:t target:me action:"buttonClicked:"
 	b's setFrame:{{x, 13}, {wd, 32}}
@@ -2010,8 +2116,8 @@ on fillPopup(pop, titles, pos)
 end fillPopup
 
 on showLocation()
-	fLocation's setStringValue:(((current application's NSString's stringWithString:parentPath)'s stringByAbbreviatingWithTildeInPath()) as text)
-	fLocation's setToolTip:parentPath
+	fLocation's setStringValue:(((current application's NSString's stringWithString:basePath)'s stringByAbbreviatingWithTildeInPath()) as text)
+	fLocation's setToolTip:basePath
 end showLocation
 
 on addProblem(msg)
@@ -2093,7 +2199,8 @@ on pathExists(p)
 end pathExists
 
 -- Relative folder paths inside RAW, e.g. {"Studio/LOOK_01", "Studio/LOOK_02", "Rooftop/S03"}
-on makeShotNames(groups, digits, numberingMode, modeIndex, jobName, sessionName)
+-- Shot folder paths inside RAW, with the folder naming (rFolderMode, rPre) applied
+on makeShotNames(groups, digits, numberingMode)
 	set out to {}
 	set gi to 0
 	repeat with g in my numberGroups(my numberInput(groups), numberingMode)
@@ -2101,26 +2208,9 @@ on makeShotNames(groups, digits, numberingMode, modeIndex, jobName, sessionName)
 		set {p, n, s, c} to contents of g
 		set L to {}
 		if gi ≤ (count of rGroupLists) then set L to item gi of rGroupLists
-		-- sessionName is date_job; modes 3-5 only exist when there are parents
-		if p is "" then
-			set pp to ""
-		else
-			set pp to my pName(p) & partSep
-		end if
 		-- pre: what comes before the shot prefix
-		if modeIndex is 2 then
-			set pre to jobName & partSep
-		else if modeIndex is 3 then
-			set pre to pp
-		else if modeIndex is 4 then
-			set pre to jobName & partSep & pp
-		else if modeIndex is 5 then
-			set pre to sessionName & partSep & pp
-		else if modeIndex is 6 then
-			set pre to sessionName & partSep
-		else
-			set pre to ""
-		end if
+		set pre to my shotPre(p, rFolderMode, rPre)
+		set p to my diskFolder(p, false, rFolderMode, rPre)
 		set leaves to {}
 		if L is not {} and not rAppend then
 			-- the pasted names replace prefix + number
@@ -2145,17 +2235,111 @@ on makeShotNames(groups, digits, numberingMode, modeIndex, jobName, sessionName)
 	return out
 end makeShotNames
 
+-- What goes in front of a shot folder's prefix: with balanced and dense naming the date and/or
+-- job (pre) and every level folder ("ACME_Studio_DAY1_"); with simple naming nothing
+on shotPre(p, m, pre)
+	if m is 1 then return ""
+	if p is "" then return pre
+	return pre & my pName(p) & partSep
+end shotPre
+
+-- Where a level path ("Studio/DAY1") is on disk inside RAW with folder naming m:
+-- simple and balanced Studio/DAY1, dense ACME_Studio/ACME_Studio_DAY1. isCapture: the last
+-- level is captured into (shot folders off), so with balanced it carries the others too
+on diskFolder(p, isCapture, m, pre)
+	if p is "" or m is 1 then return p
+	set oldTID to AppleScript's text item delimiters
+	set AppleScript's text item delimiters to "/"
+	set comps to text items of p
+	set out to {}
+	set chain to ""
+	repeat with k from 1 to count of comps
+		set c to item k of comps
+		if k is 1 then
+			set chain to c
+		else
+			set chain to chain & partSep & c
+		end if
+		if m is 3 or (isCapture and k is (count of comps)) then
+			set end of out to pre & chain
+		else
+			set end of out to c
+		end if
+	end repeat
+	set r to out as text
+	set AppleScript's text item delimiters to oldTID
+	return r
+end diskFolder
+
+-- The first capture folder's path for the folder naming popup
+on examplePath(p, shot, hasShots, m, pre)
+	if not hasShots then return my diskFolder(p, true, m, pre)
+	set leaf to my shotPre(p, m, pre) & shot
+	if p is "" then return leaf
+	return my diskFolder(p, false, m, pre) & "/" & leaf
+end examplePath
+
+-- Of the level paths above the capture folders: {the leading part they all share ("Studio"),
+-- the rest that differs, as text ("DAY1, DAY2"; levels split by " / ")}
+on commonLevel1(ups)
+	if ups is {} then return {"", ""}
+	set oldTID to AppleScript's text item delimiters
+	set AppleScript's text item delimiters to "/"
+	set compLists to {}
+	set maxN to 0
+	repeat with u in ups
+		if (contents of u) is "" then
+			set end of compLists to {}
+		else
+			set end of compLists to text items of (contents of u)
+		end if
+		if (count of last item of compLists) > maxN then set maxN to count of last item of compLists
+	end repeat
+	set common to {}
+	repeat with k from 1 to maxN
+		set firstL to item 1 of compLists
+		if (count of firstL) < k then exit repeat
+		set same to true
+		repeat with cl in compLists
+			if (count of cl) < k then
+				set same to false
+			else if item k of cl is not item k of firstL then
+				set same to false
+			end if
+		end repeat
+		if not same then exit repeat
+		set end of common to item k of item 1 of compLists
+	end repeat
+	set commonText to common as text
+	-- every level below the shared part, each value once
+	set lostLevels to {}
+	repeat with k from (count of common) + 1 to maxN
+		set vals to {}
+		repeat with cl in compLists
+			if (count of cl) ≥ k then
+				if my posOfText(item k of cl, vals) is 0 then set end of vals to item k of cl
+			end if
+		end repeat
+		set AppleScript's text item delimiters to ", "
+		set end of lostLevels to vals as text
+	end repeat
+	set AppleScript's text item delimiters to " / "
+	set lostText to lostLevels as text
+	set AppleScript's text item delimiters to oldTID
+	return {commonText, lostText}
+end commonLevel1
+
 ---------- SESSION BUILDER (no dialogs; also used by tests) ----------
-on buildSession(parentFolder, sessionName, jobName, photographer, shotNames, captureFormat)
-	set sessionPath to (POSIX path of parentFolder) & sessionName & "/"
+on buildSession(baseFolder, sessionName, jobName, photographer, shotNames, captureFormat)
+	set sessionPath to (POSIX path of baseFolder) & sessionName & "/"
 	set copyrightNote to ""
 	---------- 2. CREATE SESSION ----------
 	tell application "Capture One"
 		activate
 		if templateName is "" then
-			set newDoc to make new document with properties {kind:session, name:sessionName, path:parentFolder}
+			set newDoc to make new document with properties {kind:session, name:sessionName, path:baseFolder}
 		else
-			set newDoc to make new document with properties {kind:session, name:sessionName, path:parentFolder, template:templateName}
+			set newDoc to make new document with properties {kind:session, name:sessionName, path:baseFolder, template:templateName}
 		end if
 	end tell
 
@@ -2190,7 +2374,7 @@ on buildSession(parentFolder, sessionName, jobName, photographer, shotNames, cap
 	if prelightName is not "" then
 		set firstCapturePath to rawPath & prelightName
 	else if shotNames is {} then
-		set firstCapturePath to rawPath -- no parent or shot folders: capture straight into RAW
+		set firstCapturePath to rawPath -- no level folder or shot folders: capture straight into RAW
 	else
 		set firstCapturePath to rawPath & (item 1 of shotNames)
 	end if
@@ -2251,20 +2435,13 @@ on setCopyright(theDoc, photographer)
 end setCopyright
 ---------- UTILITIES ----------
 -- Text for the final check dialog: where, which folders, example file name
-on summaryText(sessionName, parentPath, shotNames, namingIndex, jobName, counterDigits, photographer)
-	if shotNames is {} then
-		set firstShot to rawName
-	else
-		set firstShot to my lastComponent(item 1 of shotNames)
-	end if
-	set c to my pad(1, counterDigits)
-	set examples to {firstShot & partSep & c, jobName & partSep & c, jobName & partSep & firstShot & partSep & c, sessionName & partSep & firstShot & partSep & c, rDate & partSep & firstShot & partSep & c, sessionName & partSep & c}
-	set t to "Create session “" & sessionName & "”" & return & "in " & parentPath & return & return
+on summaryText(sessionName, basePath, shotNames, photographer)
+	set t to "Create session “" & sessionName & "”" & return & "in " & basePath & return & return
 	-- the session folder, with RAW (and everything captured into) first
 	set t to t & sessionName & "/" & return
 	set t to t & my indent(1) & rawName & "/" & return
 	if prelightName is not "" then set t to t & my indent(2) & prelightName & "/" & return
-	-- folder tree inside RAW: every parent, subfolder, shot folder and shot subfolder on its own
+	-- folder tree inside RAW: every level 1 folder, level 2 folder, shot folder and shot subfolder on its own
 	-- indented line, each level printed once where it changes
 	set printed to {} -- path components of the previous line, by level
 	set oldTID to AppleScript's text item delimiters
@@ -2294,7 +2471,7 @@ on summaryText(sessionName, parentPath, shotNames, namingIndex, jobName, counter
 	return t
 end summaryText
 
-on parentOf(relPath)
+on level1Of(relPath)
 	-- everything before the last /: "Studio/DAY1/SHOT01" -> "Studio/DAY1"
 	if relPath does not contain "/" then return ""
 	set oldTID to AppleScript's text item delimiters
@@ -2302,10 +2479,10 @@ on parentOf(relPath)
 	set r to (text items 1 thru -2 of relPath) as text
 	set AppleScript's text item delimiters to oldTID
 	return r
-end parentOf
+end level1Of
 
 -- "Studio, Day 1,, Roof top" -> {"Studio", "Day-1", "Roof-top"}
-on splitParents(t)
+on splitList(t)
 	set oldTID to AppleScript's text item delimiters
 	set AppleScript's text item delimiters to ","
 	set parts to text items of t
@@ -2313,11 +2490,11 @@ on splitParents(t)
 	set out to {}
 	repeat with x in parts
 		set x to my spacesToDashes(my trim(contents of x))
-		if x contains "/" or x contains ":" then error "Parent folder names can't contain / or :"
+		if x contains "/" or x contains ":" then error "Folder names can't contain / or :"
 		if x is not "" then set end of out to x
 	end repeat
 	return out
-end splitParents
+end splitList
 
 -- Groups whose pasted names replace prefix + number take no shot numbers (count 0)
 on numberInput(groups)
@@ -2342,10 +2519,10 @@ on cleanList(pasted)
 	return out
 end cleanList
 
--- Adds the first number to each {parent, name, count} group -> {parent, name, first, count}.
--- numberingMode 1: parents sharing a shot name continue its count; a different shot name starts at 1
---               2: every parent starts at 1
---               3: one counter across all parents, whatever the shot name
+-- Adds the first number to each {level folder, name, count} group -> {level folder, name, first, count}.
+-- numberingMode 1: level folders sharing a shot name continue its count; a different shot name starts at 1
+--               2: every level folder starts at 1
+--               3: one counter across all level folders, whatever the shot name
 on numberGroups(groups, numberingMode)
 	set nextGlobal to 1
 	set seenNames to {}
@@ -2473,7 +2650,6 @@ end indent
 -- Capture folders in different places with the same name (PD/lookbook and MJ/lookbook) give
 -- file names that don't say which one they came from. Returns a note, or "".
 on sameNameWarning()
-	if rNaming is in {2, 6} then return "" -- job_counter, date_job_counter: no folder name in them
 	set seen to {}
 	set dupes to {}
 	repeat with x in rShotNames
@@ -2486,19 +2662,43 @@ on sameNameWarning()
 			end if
 		end considering
 	end repeat
-	if dupes is {} and not rParentLost then return ""
-	if rShotsOn is 0 then
-		set fix to "To fix: set Shot folder naming to parent_subfolder."
-	else
-		set fix to "To fix: pick a Shot folder naming with parent in it."
-	end if
-	-- unique folder names still lose the parent: SHOT01 doesn't say it was shot in Studio
-	if dupes is {} then return "Note: the capture folder names leave out the parent folder." & return & "File names won't show which parent folder they came from." & return & fix
+	-- simple naming: unique folder names still lose the level folder (SHOT01 doesn't say it was shot in Studio)
+	if dupes is {} then return rLostNote
 	set AppleScript's text item delimiters to ", "
 	set d to dupes as text
 	set AppleScript's text item delimiters to ""
-	return "Note: more than one capture folder is named " & d & "." & return & "File names won't show which parent folder they came from," & return & "and if the counter is reset when switching folders, names will repeat." & return & fix
+	set t to "Note: more than one capture folder is named " & d & "." & return & "If the counter is reset when switching folders, file names will repeat."
+	if rLostNote is not "" then set t to rLostNote & return & t
+	return t
 end sameNameWarning
+
+-- The folder and file naming choices; older versions saved one shot folder naming ("mode",
+-- 1 shot, 2 job_shot, 3 level_shot, 4 job_level_shot, 5 date_job_level_shot, 6 date_job_shot)
+-- and one capture file naming ("filenaming", 4-6 had the date): carried over the first time
+on readNamingPrefs()
+	set oldMode to my readPref("mode", "")
+	set oldFile to my readPref("filenaming", "")
+	set defMode to 2
+	set defJob to "1"
+	set defDate to "0"
+	set defFileDate to 0
+	if oldMode is not "" then
+		if oldMode is not in {"3", "4", "5"} then set defMode to 1
+		if oldMode is not in {"2", "4", "5", "6"} then set defJob to "0"
+		if oldMode is in {"5", "6"} then set defDate to "1"
+	end if
+	if oldFile is in {"4", "5", "6"} or my readPref("filedate", "0") is "1" then set defFileDate to 1
+	set wantFolderMode to my clampInt(my prefInt("foldernaming", defMode), 1, 3)
+	set wantFolderJob to (my readPref("folderjob", defJob) is "1")
+	set wantFolderDate to (my readPref("folderdate", defDate) is "1")
+	set wantFileMode to my clampInt(my prefInt("filemode", 2 + (defFileDate as integer)), 1, 3)
+	set wantFilePrefix to my readPref("fileprefix", "")
+end readNamingPrefs
+
+on boolText(b)
+	if b then return "1"
+	return "0"
+end boolText
 
 -- position of text in a list, case-sensitive; 0 if not there
 on posOfText(x, theList)
@@ -2562,13 +2762,13 @@ on digitsAt(t, i, n)
 	return s
 end digitsAt
 
--- Widens the window (evenly on both sides) when the file name or the level 1 parents in the
+-- Widens the window (evenly on both sides) when the file name or the level 1 folders in the
 -- shots table don't fit, and narrows it back to the width the user chose (640 at least) when they do
 on fitWidth()
 	set sz to fFileName's attributedStringValue()'s |size|()
 	set needW to ((width of sz) as integer) + 60
 	if needW < userW then set needW to userW
-	if needW < tblNeedW then set needW to tblNeedW -- the level 1 parents fit in the table
+	if needW < tblNeedW then set needW to tblNeedW -- the level 1 folders fit in the table
 	if needW < 640 then set needW to 640
 	set {{cx, cy}, {cw, ch}} to win's contentView()'s frame()
 	set {{vx, vy}, {vw, vh}} to win's screen()'s visibleFrame()
@@ -2590,21 +2790,23 @@ on lockHeight()
 end lockHeight
 
 -- Which part of the form takes a change of window height: the shots table while the user
--- drags (true), the parent folder area when rows are added or removed (false).
+-- drags (true), the level folder area when rows are added or removed (false).
 -- Everything above the growing part stays pinned to the top, everything below to the bottom.
 on tableGrows(flag)
 	if flag then
 		set {{gx, gy}, {gw, gh}} to tblScroll's frame()
 		set grower to tblScroll
 	else
-		set {{gx, gy}, {gw, gh}} to parentScroll's frame()
-		set grower to parentScroll
+		set {{gx, gy}, {gw, gh}} to level1Scroll's frame()
+		set grower to level1Scroll
 	end if
 	repeat with sub in (formView's subviews() as list)
 		set {{sx, sy}, {sw, sh}} to (contents of sub)'s frame()
 		set h to ((contents of sub)'s autoresizingMask() as integer) mod 8 -- keep the horizontal part
 		if ((contents of sub)'s isEqual:grower) as boolean then
 			((contents of sub)'s setAutoresizingMask:(h + 16))
+		else if flag and (((contents of sub)'s isEqual:btnPaste) as boolean or ((contents of sub)'s isEqual:rbAppend) as boolean or ((contents of sub)'s isEqual:rbReplace) as boolean) then
+			((contents of sub)'s setAutoresizingMask:h) -- beside the table's bottom edge: follows it down
 		else if (flag and sy + sh > gy + 1) or (not flag and sy ≥ gy) then
 			((contents of sub)'s setAutoresizingMask:(h + 8)) -- beside or above it: stays at the top
 		else
@@ -2691,7 +2893,7 @@ on windowDidResize:aNotification
 		win's setFrame:{{newX, fy}, {newW, fh}} display:true
 		set inSymResize to false
 	end if
-	my layoutParentDoc()
+	my layoutLevelDoc()
 	my layoutFolders()
 	-- the table is wider or narrower: refit its columns (not while a cell is being typed in)
 	if tbl is not missing value then

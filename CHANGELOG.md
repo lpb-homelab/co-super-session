@@ -2,13 +2,20 @@
 
 All notable changes to CO SuperSession are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## v0.3.1 – 2026-11-19
 
-- A note now warns whenever the shot folder naming leaves the parent folder out of the file names (shot, job_shot, date_job_shot, subfolder), not only when two capture folders share a name
+- Parent folders and subfolders are now called Level 1 and Level 2 folders; Subfolders now means only the shot subfolders. Saved settings for these fields (Parent folders, Subfolders, table sort) reset once
+- Folder and file naming redesigned: one Folder naming choice (Simple, Balanced, Dense) with Client + job and Date prefix checkboxes (Date always includes Client + job, so file names never get the job before the date) replaces the Shot folder naming and Capture file naming popups
+- Three file naming choices: Simple (file prefix + counter, prefix defaults to client + job), job + levels + shot + counter, or the same with the date in front. The script sets Capture One's [Name] to whatever the capture folder name is missing, so the job is never repeated
+- Shot prefix renamed to Shot folder prefix, to keep it apart from the new file prefix
+- With Simple folder naming, file names keep the level 1 and level 2 folders all capture folders share, and a note names the ones left out
+- Earlier naming choices carry over to the new settings the first time
+- Global # and Global prefix renamed to Shots per folder (all rows) and Shot folder prefix (all rows), with the name above each field; they start at 10 and SHOT, then at the last values used
+- Paste list…, Append and Replace stay at the bottom of the shot folder table when it grows
 
 ## v0.3.0 – 2026-11-16
 
-- Shot folder table: click the Parent or Subfolder header to group the rows by that column (remembered); folders are still created and numbered in parent order
+- Shot folder table: click the Level 1 or Level 2 header to group the rows by that column (remembered); folders are still created and numbered in level 1 order
 - The folder tree preview moved to its own large, resizable window, opened with Preview file tree… (⌘P) under the file name; problems and notes now show in a line above the buttons
 - The file tree preview lists every shot folder and shot subfolder instead of a range (SHOT01 … SHOT10), inside the session folder with Selects, Output, Trash and any extra folder on their own lines beside RAW
 - More space between the capture naming popups and the file name

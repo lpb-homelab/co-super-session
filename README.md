@@ -37,7 +37,7 @@ A two-day shoot for the lamp brand Lumara, with three key visuals (prefix KV) a 
 └── 04_DOCS/
 ```
 
-A fashion shoot can go a level deeper. Here the brand Halden shoots its FW27 season. It uses two collections, NORDLYS and EMBER, as parent folders, with LOOKBOOK and EDITORIAL as subfolders. The lookbook shots use the prefix L and the editorial shots use SET, and numbering restarts in each folder. The lookbook rows also get a pasted list of SKU codes (Paste list, Append), so each look folder carries its SKU. The shot folders are named job_parent_shot, so each folder and every capture in it carries the client, job, collection and subfolder:
+A fashion shoot can go a level deeper. Here the brand Halden shoots its FW27 season. It uses two collections, NORDLYS and EMBER, as level 1 folders, with LOOKBOOK and EDITORIAL as level 2 folders. The lookbook shots use the prefix L and the editorial shots use SET, and numbering restarts in each folder. The lookbook rows also get a pasted list of SKU codes (Paste list, Append), so each look folder carries its SKU. Folder naming is Balanced with the Client + job prefix: the level 1 and level 2 folders keep short names, and each shot folder, and so every capture in it, carries the client, job, collection and level 2 folder:
 
 ```
 2027-02-15_HALDEN_FW27/
@@ -95,16 +95,21 @@ The window works from top to bottom, and the preview updates as you type. Hover 
 2. **Session folders.** Name the RAW, selects, output, trash and documents folders.
 3. **Date format and separators.** Set how the date is written (for example `YYYY-MM-DD` or `YYMMDD`) and which characters join the parts of each name.
 4. **Prelight folder.** If you turn it on, a folder is created inside RAW and used as the first capture folder.
-5. **Parent folders.** Add groups such as days, locations or collections. Turn on **Subfolders** to add a second level inside each one, for example `Studio/DAY1`.
-6. **Shot folders.** Each row in the table is one group of shots. Click a cell to change its shot prefix or its number of shots. Type a number in **Global #:** to use it for every row. Type a prefix in **Global prefix:** to use it for every row whose prefix you haven't typed in the table; clear a row's prefix to make it follow **Global prefix:** again. With Subfolders on, there is one row per parent and subfolder pair (`Studio/DAY1`, `Studio/DAY2`, `Rooftop/DAY1`…), shown in the **Parent** and **Subfolder** columns. Click either header to group the rows by it. The table grows to show every row without scrolling; drag the window's bottom edge to make it taller still (remembered).
+5. **Level 1 folders.** Add groups such as days, locations or collections. Turn on **Level 2 folders** to add a second level inside each one, for example `Studio/DAY1`.
+6. **Shot folders.** Each row in the table is one group of shots. Click a cell to change its shot folder prefix or its number of shots. Type a number in **Shots per folder (all rows)** (10 the first time) to use it for every row. Type a prefix in **Shot folder prefix (all rows)** (SHOT the first time) to use it for every row whose folder prefix you haven't typed in the table; clear a row's prefix to make it follow that field again. With Level 2 folders on, there is one row per level 1 and level 2 pair (`Studio/DAY1`, `Studio/DAY2`, `Rooftop/DAY1`…), shown in the **Level 1** and **Level 2** columns. Click either header to group the rows by it. The table grows to show every row without scrolling; drag the window's bottom edge to make it taller still (remembered).
 7. **Pasted lists.** Select one or more rows (⌘A selects all), then click **Paste list…** or the row's **List** cell. Paste one name per line and press ⌘Return. The number of names sets the number of shots for that row. **Remove list** goes back to plain numbering. Choose how the names are used:
    - **Append** keeps the number and adds the name: `SHOT01_NL4102`
    - **Replace** uses the name as the folder: `NL4102`
 8. **Shot subfolders.** Optional. Type a short list such as `main, plates` or `full, medium, close` to get those folders inside every shot folder. They are not numbered, and each is named after its shot (`SHOT01/SHOT01_main`), so the shot stays in the capture file name. Only table rows with **Subfolders** checked get them; untick a row to keep its shot folders plain.
-9. **Shot folder count.** Choose whether numbering restarts in each parent folder, continues per shot prefix, or continues across all parent folders.
-10. **Shot folder naming and capture file naming.** Choose what each shot folder and capture file is called, and how many digits the numbers have.
-   With **Shot folders** off and **Subfolders** on, you capture straight into the subfolders. Shot folder naming then picks their names: **subfolder** gives `KV1/main`, **parent_subfolder** gives `KV1/KV1_main`. Capture One can only put the folder you capture into in the file name, so use parent_subfolder to get `KV1` into the file name too.
-11. **Check the preview.** A sample file name and any problems, such as a folder that already exists, appear above the buttons. Click **Preview file tree…** (⌘P) to see the whole folder tree in its own window, which follows your edits. Click **Create Session** to build it.
+9. **Shot folder count.** Choose whether numbering restarts in each folder, continues per shot prefix, or continues across all folders.
+10. **Folder naming.** Choose how much of the folders above it each folder name repeats:
+   - **Simple**: plain names: `NORDLYS/LOOKBOOK/L01`
+   - **Balanced**: only the folder you capture into carries the folders above it: `NORDLYS/LOOKBOOK/NORDLYS_LOOKBOOK_L01`
+   - **Dense**: every folder carries the folders above it: `NORDLYS/NORDLYS_LOOKBOOK/NORDLYS_LOOKBOOK_L01`
+
+   **Shot folder prefix** puts the client + job, and optionally the date, in front of those prefixed folder names. The date always comes with the client + job, so file names keep the date before the job. **digits** sets the digits of the shot number. With **Shot folders** off you capture straight into the last level, so Balanced gives it the full name (`KV1/KV1_main`).
+11. **File names.** Choose one of three. **Simple** gives a file prefix plus the counter (`ACME_job_0001`); type the prefix in the field next to the popup, or leave it empty to use the client + job. For the other two, Capture One can only put the name of the folder you capture into in a file name, so the script fills Capture One's [Name] token with whatever that folder name is missing. **Job, levels, shot + counter** carries the job, every level 1 and level 2 folder, the shot and the counter; **Date, job, levels, shot + counter** starts with the date too (always, when the folder prefix has the date). **digits** sets the length of the counter. With **Simple** folder naming, those two keep only the level 1 and level 2 folders every capture folder shares; a note says which are left out. Simple file names are only unique if Capture One's counter isn't reset when switching folders.
+12. **Check the preview.** A sample file name and any problems, such as a folder that already exists, appear above the buttons. Click **Preview file tree…** (⌘P) to see the whole folder tree in its own window, which follows your edits. Click **Create Session** to build it.
 
 ## Updating
 
