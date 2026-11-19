@@ -71,7 +71,32 @@ A capture in the second Ember look could then be named `HALDEN_FW27_EMBER_LOOKBO
 
 When the session is ready, Capture One opens on the first capture folder.
 
-## Requirements
+## Design requirements
+
+These are the rules the script is built to keep. New features have to keep them too.
+
+**Naming**
+
+- **Every capture file identifies itself.** A file name alone says which job, level 1 and level 2 folders and shot it belongs to. Capture One can only put the capture folder's own name in a file name, so the script fills Capture One's [Name] token with whatever that folder name is missing. When a naming choice leaves something out, a note says so.
+- **Shot folders are either simple or fully mobile.** A shot folder has a plain name (Simple) or carries everything above it in its name (Balanced, Dense), so it can be moved or sent anywhere without losing its context.
+- **Nothing is said twice.** The job never appears twice in a file name, and with Balanced naming only the folder you capture into repeats the folders above it.
+- **Names sort by date.** When the date is in a name, it always comes before the job, so sessions, folders and files sort in date order.
+- **Every name is unique.** Two folders that would get the same name, even if they differ only in capitals (RAW and raw), are flagged before anything is created.
+
+**Safety**
+
+- **You see the result before anything is created.** The preview shows the full folder tree, every folder listed, and a sample file name, and updates as you type.
+- **Nothing fails silently.** Problems, lost information and errors are reported instead of being skipped.
+- **The order you view things in never changes what gets built.** Grouping the shot folder table by a column changes only the display; folders are still created and numbered in level 1 order.
+
+**Convenience**
+
+- **Set it once for every row, then override any row.** Values in the "(all rows)" fields fill every row you haven't typed a value into yourself. Clear a row's value to make it follow that field again.
+- **Your choices persist.** Settings are remembered between runs, kept through updates and carried over when a setting is renamed or redesigned, even settings a session couldn't use.
+- **One window, top to bottom.** The whole session is set up from a single window that grows to fit its content, so the shot folder table never scrolls.
+- **It works for everyone.** Accented names (Zoë, Café) are kept intact, and users without Capture One Studio get their copyright through a saved metadata style.
+
+## System requirements
 
 - macOS
 - Capture One 16
@@ -106,6 +131,8 @@ The window works from top to bottom, and the preview updates as you type. Hover 
    - **Simple**: plain names: `NORDLYS/LOOKBOOK/L01`
    - **Balanced**: only the folder you capture into carries the folders above it: `NORDLYS/LOOKBOOK/NORDLYS_LOOKBOOK_L01`
    - **Dense**: every folder carries the folders above it: `NORDLYS/NORDLYS_LOOKBOOK/NORDLYS_LOOKBOOK_L01`
+
+   Shot folders are either simple or fully mobile. With Balanced or Dense, a shot folder keeps all the information it needs in its own name, so moving it out of the session or sending it on its own loses nothing; add the **Shot folder prefix** to carry the client + job (and date) too.
 
    **Shot folder prefix** puts the client + job, and optionally the date, in front of those prefixed folder names. The date always comes with the client + job, so file names keep the date before the job. **digits** sets the digits of the shot number. With **Shot folders** off you capture straight into the last level, so Balanced gives it the full name (`KV1/KV1_main`).
 11. **File names.** Choose one of three. **Simple** gives a file prefix plus the counter (`ACME_job_0001`); type the prefix in the field next to the popup, or leave it empty to use the client + job. For the other two, Capture One can only put the name of the folder you capture into in a file name, so the script fills Capture One's [Name] token with whatever that folder name is missing. **Job, levels, shot + counter** carries the job, every level 1 and level 2 folder, the shot and the counter; **Date, job, levels, shot + counter** starts with the date too (always, when the folder prefix has the date). **digits** sets the length of the counter. With **Simple** folder naming, those two keep only the level 1 and level 2 folders every capture folder shares; a note says which are left out. Simple file names are only unique if Capture One's counter isn't reset when switching folders.
