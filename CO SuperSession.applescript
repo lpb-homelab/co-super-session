@@ -1046,6 +1046,20 @@ on refreshBody()
 			set end of rShotNames to my diskFolder(contents of p, true, rFolderMode, rPre)
 		end repeat
 	end if
+	-- the prelight folder sits in RAW next to the top level or shot folders; the same name
+	-- (ignoring case, like the disk) would merge them into one folder
+	if prelightName is not "" then
+		set oldTID to AppleScript's text item delimiters
+		set AppleScript's text item delimiters to "/"
+		repeat with x in rShotNames
+			if (text item 1 of (contents of x)) is prelightName then
+				set AppleScript's text item delimiters to oldTID
+				my addProblem("The prelight folder and another folder in " & rawName & " are both named “" & prelightName & "”.")
+				exit repeat
+			end if
+		end repeat
+		set AppleScript's text item delimiters to oldTID
+	end if
 
 	-- file names: [Name]_[Destination Folder Name]_[Counter]. Capture One only sees the name of
 	-- the folder captured into, so [Name] holds what that name is missing: date, job, level folders
