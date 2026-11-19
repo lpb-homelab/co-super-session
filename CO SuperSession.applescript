@@ -183,8 +183,8 @@ end run
 on main()
 	set basePath to my readPref("path", POSIX path of (path to desktop folder))
 	if not my pathExists(basePath) then set basePath to POSIX path of (path to desktop folder)
-	set defPrefix to my readPref("prefix", "SHOT")
-	set defCount to my readPref("subnumber", "10")
+	set defPrefix to my readPref("prefix", "")
+	set defCount to my readPref("subnumber", "")
 	set wantNumbering to my clampInt(my prefInt("numbering", 2), 1, 3)
 	my setSeparators(my clampInt(my prefInt("separators", 1), 1, 4))
 	my readNamingPrefs()
@@ -263,8 +263,22 @@ on main()
 		my writePref(item i of folderKeys, item i of fnames)
 	end repeat
 	-- the "all rows" fields as they were, not the last row of the table
-	if rAllPrefix is not "" then my writePref("prefix", rAllPrefix)
-	if rAllCount is not "" then my writePref("subnumber", rAllCount)
+	-- kept even when empty; empty when the table's rows have different prefixes (E, L, C)
+	set savePrefix to rAllPrefix
+	if (count of rGroups) > 1 then
+		considering case
+			repeat with g in rGroups
+				if item 2 of g is not item 2 of item 1 of rGroups then set savePrefix to ""
+			end repeat
+		end considering
+	end if
+	my writePref("prefix", savePrefix)
+	-- kept even when empty; empty when the table's rows have different numbers of shots
+	set saveCount to rAllCount
+	repeat with g in rGroups
+		if item 3 of g is not item 3 of item 1 of rGroups then set saveCount to ""
+	end repeat
+	my writePref("subnumber", saveCount)
 	if (count of rGroups) > 0 then my writePref("digits", rDigits as text)
 	my writePref("shotrows", my rowsText())
 
@@ -437,10 +451,11 @@ on buildWindow()
 	allLbl's setFrame:{{18, y + 116}, {145, 14}}
 	allLbl's setFont:(current application's NSFont's systemFontOfSize:10)
 	allLbl's setTextColor:(current application's NSColor's secondaryLabelColor)
-	-- starts at the last used number (10 the first time; never 0)
+	-- starts at the last used number (empty the first time; empty means the placeholder 10; never 0)
 	set allCount to defCount
-	if allCount is "0" or allCount is "" then set allCount to "10"
+	if allCount is "0" then set allCount to ""
 	set fAllCounts to my addField(v, allCount, 18, y + 92, 145)
+	fAllCounts's setPlaceholderString:"10"
 	fAllCounts's setFrame:{{18, y + 92}, {44, 22}} -- sized for up to 3 digits
 	fAllCounts's setTag:300
 	fAllCounts's setToolTip:"Number of shots for every row in the table"
@@ -449,10 +464,9 @@ on buildWindow()
 	preLbl's setFrame:{{18, y + 76}, {145, 14}}
 	preLbl's setFont:(current application's NSFont's systemFontOfSize:10)
 	preLbl's setTextColor:(current application's NSColor's secondaryLabelColor)
-	-- starts at the last used prefix (SHOT the first time)
-	set allPrefix to defPrefix
-	if allPrefix is "" then set allPrefix to "SHOT"
-	set fAllPrefix to my addField(v, allPrefix, 18, y + 52, 145)
+	-- starts at the last used prefix (empty the first time; empty means the placeholder SHOT)
+	set fAllPrefix to my addField(v, defPrefix, 18, y + 52, 145)
+	fAllPrefix's setPlaceholderString:"SHOT"
 	fAllPrefix's setFrame:{{18, y + 52}, {145, 22}}
 	fAllPrefix's setTag:301
 	fAllPrefix's setToolTip:"Shot folder prefix for every row in the table, except rows whose prefix you typed in the table." & linefeed & "Clear a row's prefix in the table to give it this one again."
@@ -1530,18 +1544,20 @@ on syncRows()
 					set c to item (i - 1) of newCounts
 				else
 					set nm to defPrefix
+					if nm is "" then set nm to "SHOT"
 					set c to defCount
+					if c is "" then set c to "10"
 				end if
 			end if
 		end if
 		-- new rows follow the global prefix and number when they are set
 		if r is 0 and fAllPrefix is not missing value then
-			set allP to my trim((fAllPrefix's stringValue()) as text)
-			if allP is not "" then set nm to allP
+			set nm to my trim((fAllPrefix's stringValue()) as text)
+			if nm is "" then set nm to "SHOT"
 		end if
 		if r is 0 and fAllCounts is not missing value then
-			set allT to my trim((fAllCounts's stringValue()) as text)
-			if allT is not "" then set c to allT
+			set c to my trim((fAllCounts's stringValue()) as text)
+			if c is "" then set c to "10"
 		end if
 		if c is "0" then set c to "10" -- shot folders need at least one shot
 		set end of newNames to nm
@@ -1721,25 +1737,24 @@ on controlTextDidChange:aNotification
 	else if (obj's isEqual:fDateFmt) as boolean then
 		fDate's setStringValue:(my formatToday(my dashOnly((fDateFmt's stringValue()) as text)))
 	else if (obj's tag()) as integer is 300 then
-		-- number of shots for all rows
+		-- number of shots for all rows; empty: the placeholder 10
 		set t to my trim((obj's stringValue()) as text)
-		if t is not "" then
-			repeat with k from 1 to count of rowCounts
-				set item k of rowCounts to t
-			end repeat
-			tbl's reloadData()
-		end if
+		if t is "" then set t to "10"
+		repeat with k from 1 to count of rowCounts
+			set item k of rowCounts to t
+		end repeat
+		tbl's reloadData()
 	else if (obj's tag()) as integer is 302 then
 		set wantFilePrefix to (obj's stringValue()) as text
 	else if (obj's tag()) as integer is 301 then
 		-- shot prefix for every row the table hasn't given its own
+		-- empty: the placeholder SHOT
 		set t to my trim((obj's stringValue()) as text)
-		if t is not "" then
-			repeat with k from 1 to count of rowNames
-				if not my rowIsOwn(k) then set item k of rowNames to t
-			end repeat
-			tbl's reloadData()
-		end if
+		if t is "" then set t to "SHOT"
+		repeat with k from 1 to count of rowNames
+			if not my rowIsOwn(k) then set item k of rowNames to t
+		end repeat
+		tbl's reloadData()
 	else if (obj's tag()) as integer > 200 then
 		-- a level 2 field
 		set i to ((obj's tag()) as integer) - 200
@@ -1946,7 +1961,8 @@ on tableView:tv setObjectValue:val forTableColumn:col row:r
 			set end of rowOwnName to false
 		end repeat
 		set allP to my trim((fAllPrefix's stringValue()) as text)
-		if my trim(t) is "" and allP is not "" then
+		if allP is "" then set allP to "SHOT"
+		if my trim(t) is "" then
 			-- cleared: the row follows the global prefix again
 			set t to allP
 			set item i of rowOwnName to false
