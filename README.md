@@ -37,62 +37,70 @@ A two-day shoot for the lamp brand Lumara, with three key visuals (prefix KV) a 
 └── 04_DOCS/
 ```
 
-A fashion shoot can go a level deeper. Here the brand Halden shoots its FW29 season. It uses two collections, NORDYS and EMBER, as level 1 folders, with LOOKBOOK, CAMPAIGN and EDITORIAL as level 2 folders. The lookbook shots use the prefix L, the campaign shots C and the editorial shots E, and numbering restarts in each folder. The lookbook rows get a pasted list of SKU codes (Paste list, Append), so each look folder carries its SKU, and the number of codes sets the number of looks: five for Nordys, six for Ember. Only the lookbook rows have Subfolders ticked, so each look gets a full and a close subfolder. There is no prelight folder. Folder naming is Balanced with the Shot folder prefix (client + job): the level 1 and level 2 folders keep short names, and each shot folder, and so every capture in it, carries the client, job, collection and level 2 folder. File names use Job, levels, shot + counter:
+A fashion shoot can go a level deeper. Here the brand Halden shoots its FW27 season. It uses two collections, NORDYS and EMBER, as level 1 folders, with LOOKBOOK, CAMPAIGN and EDITORIAL as level 2 folders. The lookbook shots use the prefix L, the campaign shots C and the editorial shots E, and numbering restarts in each folder. The lookbook rows get a pasted list of SKU codes (Paste list, Append), so each look folder carries its SKU, and the number of codes sets the number of looks: five for each collection. Only the lookbook rows have Subfolders ticked, so each look gets a full and a close subfolder. The campaign rows have Custom subfolders instead, so each campaign shot gets a main and a plates subfolder. There is no prelight folder. Folder naming is Balanced with the Shot folder prefix (client + job): the level 1 and level 2 folders keep short names, and each shot folder, and so every capture in it, carries the client, job, collection and level 2 folder. File names use Job, levels, shot + counter:
 
 ```
-2029-02-15_HALDEN_FW29/
+2026-11-19_HALDEN_FW27/
 ├── 00_RAW/
 │   ├── NORDYS/
 │   │   ├── LOOKBOOK/
-│   │   │   ├── HALDEN_FW29_NORDYS_LOOKBOOK_L01_NO4103A/
-│   │   │   │   ├── HALDEN_FW29_NORDYS_LOOKBOOK_L01_NO4103A_full/
-│   │   │   │   └── HALDEN_FW29_NORDYS_LOOKBOOK_L01_NO4103A_close/
-│   │   │   ├── HALDEN_FW29_NORDYS_LOOKBOOK_L02_NO4106B/
-│   │   │   │   ├── HALDEN_FW29_NORDYS_LOOKBOOK_L02_NO4106B_full/
-│   │   │   │   └── HALDEN_FW29_NORDYS_LOOKBOOK_L02_NO4106B_close/
-│   │   │   ├── HALDEN_FW29_NORDYS_LOOKBOOK_L03_NO4110A/
-│   │   │   │   ├── HALDEN_FW29_NORDYS_LOOKBOOK_L03_NO4110A_full/
-│   │   │   │   └── HALDEN_FW29_NORDYS_LOOKBOOK_L03_NO4110A_close/
-│   │   │   ├── HALDEN_FW29_NORDYS_LOOKBOOK_L04_NO4113A/
-│   │   │   │   ├── HALDEN_FW29_NORDYS_LOOKBOOK_L04_NO4113A_full/
-│   │   │   │   └── HALDEN_FW29_NORDYS_LOOKBOOK_L04_NO4113A_close/
-│   │   │   └── HALDEN_FW29_NORDYS_LOOKBOOK_L05_NO4117B/
-│   │   │       ├── HALDEN_FW29_NORDYS_LOOKBOOK_L05_NO4117B_full/
-│   │   │       └── HALDEN_FW29_NORDYS_LOOKBOOK_L05_NO4117B_close/
+│   │   │   ├── HALDEN_FW27_NORDYS_LOOKBOOK_L01_NO4103A/
+│   │   │   │   ├── HALDEN_FW27_NORDYS_LOOKBOOK_L01_NO4103A_full/
+│   │   │   │   └── HALDEN_FW27_NORDYS_LOOKBOOK_L01_NO4103A_close/
+│   │   │   ├── HALDEN_FW27_NORDYS_LOOKBOOK_L02_NO4106B/
+│   │   │   │   ├── HALDEN_FW27_NORDYS_LOOKBOOK_L02_NO4106B_full/
+│   │   │   │   └── HALDEN_FW27_NORDYS_LOOKBOOK_L02_NO4106B_close/
+│   │   │   ├── HALDEN_FW27_NORDYS_LOOKBOOK_L03_NO4110A/
+│   │   │   │   ├── HALDEN_FW27_NORDYS_LOOKBOOK_L03_NO4110A_full/
+│   │   │   │   └── HALDEN_FW27_NORDYS_LOOKBOOK_L03_NO4110A_close/
+│   │   │   ├── HALDEN_FW27_NORDYS_LOOKBOOK_L04_NO4113A/
+│   │   │   │   ├── HALDEN_FW27_NORDYS_LOOKBOOK_L04_NO4113A_full/
+│   │   │   │   └── HALDEN_FW27_NORDYS_LOOKBOOK_L04_NO4113A_close/
+│   │   │   └── HALDEN_FW27_NORDYS_LOOKBOOK_L05_NO4117B/
+│   │   │       ├── HALDEN_FW27_NORDYS_LOOKBOOK_L05_NO4117B_full/
+│   │   │       └── HALDEN_FW27_NORDYS_LOOKBOOK_L05_NO4117B_close/
 │   │   ├── CAMPAIGN/
-│   │   │   ├── HALDEN_FW29_NORDYS_CAMPAIGN_C01/
-│   │   │   └── HALDEN_FW29_NORDYS_CAMPAIGN_C02/
+│   │   │   ├── HALDEN_FW27_NORDYS_CAMPAIGN_C01/
+│   │   │   │   ├── HALDEN_FW27_NORDYS_CAMPAIGN_C01_main/
+│   │   │   │   └── HALDEN_FW27_NORDYS_CAMPAIGN_C01_plates/
+│   │   │   └── HALDEN_FW27_NORDYS_CAMPAIGN_C02/
+│   │   │       ├── HALDEN_FW27_NORDYS_CAMPAIGN_C02_main/
+│   │   │       └── HALDEN_FW27_NORDYS_CAMPAIGN_C02_plates/
 │   │   └── EDITORIAL/
-│   │       ├── HALDEN_FW29_NORDYS_EDITORIAL_E01/
-│   │       ├── HALDEN_FW29_NORDYS_EDITORIAL_E02/
-│   │       ├── HALDEN_FW29_NORDYS_EDITORIAL_E03/
-│   │       └── HALDEN_FW29_NORDYS_EDITORIAL_E04/
+│   │       ├── HALDEN_FW27_NORDYS_EDITORIAL_E01/
+│   │       ├── HALDEN_FW27_NORDYS_EDITORIAL_E02/
+│   │       ├── HALDEN_FW27_NORDYS_EDITORIAL_E03/
+│   │       └── HALDEN_FW27_NORDYS_EDITORIAL_E04/
 │   └── EMBER/
 │       ├── LOOKBOOK/
-│       │   ├── HALDEN_FW29_EMBER_LOOKBOOK_L01_EM4204A/
-│       │   │   ├── HALDEN_FW29_EMBER_LOOKBOOK_L01_EM4204A_full/
-│       │   │   └── HALDEN_FW29_EMBER_LOOKBOOK_L01_EM4204A_close/
-│       │   ├── HALDEN_FW29_EMBER_LOOKBOOK_L02_EM4207B/
-│       │   │   ├── HALDEN_FW29_EMBER_LOOKBOOK_L02_EM4207B_full/
-│       │   │   └── HALDEN_FW29_EMBER_LOOKBOOK_L02_EM4207B_close/
+│       │   ├── HALDEN_FW27_EMBER_LOOKBOOK_L01_EM4204A/
+│       │   │   ├── HALDEN_FW27_EMBER_LOOKBOOK_L01_EM4204A_full/
+│       │   │   └── HALDEN_FW27_EMBER_LOOKBOOK_L01_EM4204A_close/
+│       │   ├── HALDEN_FW27_EMBER_LOOKBOOK_L02_EM4207B/
+│       │   │   ├── HALDEN_FW27_EMBER_LOOKBOOK_L02_EM4207B_full/
+│       │   │   └── HALDEN_FW27_EMBER_LOOKBOOK_L02_EM4207B_close/
 │       │   ├── …
-│       │   └── HALDEN_FW29_EMBER_LOOKBOOK_L06_EM4222A/
-│       │       ├── HALDEN_FW29_EMBER_LOOKBOOK_L06_EM4222A_full/
-│       │       └── HALDEN_FW29_EMBER_LOOKBOOK_L06_EM4222A_close/
+│       │   └── HALDEN_FW27_EMBER_LOOKBOOK_L05_EM4218B/
+│       │       ├── HALDEN_FW27_EMBER_LOOKBOOK_L05_EM4218B_full/
+│       │       └── HALDEN_FW27_EMBER_LOOKBOOK_L05_EM4218B_close/
 │       ├── CAMPAIGN/
-│       │   ├── HALDEN_FW29_EMBER_CAMPAIGN_C01/
-│       │   └── HALDEN_FW29_EMBER_CAMPAIGN_C02/
+│       │   ├── HALDEN_FW27_EMBER_CAMPAIGN_C01/
+│       │   │   ├── HALDEN_FW27_EMBER_CAMPAIGN_C01_main/
+│       │   │   └── HALDEN_FW27_EMBER_CAMPAIGN_C01_plates/
+│       │   └── HALDEN_FW27_EMBER_CAMPAIGN_C02/
+│       │       ├── HALDEN_FW27_EMBER_CAMPAIGN_C02_main/
+│       │       └── HALDEN_FW27_EMBER_CAMPAIGN_C02_plates/
 │       └── EDITORIAL/
-│           ├── HALDEN_FW29_EMBER_EDITORIAL_E01/
+│           ├── HALDEN_FW27_EMBER_EDITORIAL_E01/
 │           ├── …
-│           └── HALDEN_FW29_EMBER_EDITORIAL_E04/
+│           └── HALDEN_FW27_EMBER_EDITORIAL_E04/
 ├── 01_SELECTS/
 ├── 02_OUTPUT/
 ├── 03_TRASH/
 └── 04_DOCS/
 ```
 
-A capture in the close subfolder of the second Ember look could then be named `HALDEN_FW29_EMBER_LOOKBOOK_L02_EM4207B_close_0001`.
+A capture in the close subfolder of the second Ember look could then be named `HALDEN_FW27_EMBER_LOOKBOOK_L02_EM4207B_close_0001`.
 
 When the session is ready, Capture One opens on the first capture folder.
 
