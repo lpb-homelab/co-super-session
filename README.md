@@ -15,7 +15,7 @@ Starting a shoot in Capture One usually means creating the session, renaming its
 - Sets the capture file naming so every image carries the job and shot it belongs to
 - Adds the photographer's copyright to every capture
 - Shows the resulting folder tree and a sample file name before anything is created, and flags problems such as a folder that already exists
-- Remembers your choices for the next session
+- Remembers your choices for the next session, and saves them as named presets for repeat clients
 
 A two-day shoot for the lamp brand Lumara, with three key visuals (prefix KV) a day, might look like this:
 
@@ -177,6 +177,7 @@ The window works from top to bottom, and the preview updates as you type. Hover 
    **Shot folder prefix** puts the client + job, and optionally the date, in front of those prefixed folder names. The date always comes with the client + job, so file names keep the date before the job. **digits** sets the digits of the shot number. With **Shot folders** off you capture straight into the last level, so Balanced gives it the full name (`KV1/KV1_main`).
 11. **File names.** Choose one of three. **Simple** gives a file prefix plus the counter (`ACME_job_0001`); type the prefix in the field next to the popup, or leave it empty to use the client + job. For the other two, Capture One can only put the name of the folder you capture into in a file name, so the script fills Capture One's [Name] token with whatever that folder name is missing. **Job, levels, shot + counter** carries the job, every level 1 and level 2 folder, the shot and the counter; **Date, job, levels, shot + counter** starts with the date too (always, when the folder prefix has the date). **digits** sets the length of the counter. With **Simple** folder naming, those two keep only the level 1 and level 2 folders every capture folder shares; a note says which are left out. Simple file names are only unique if Capture One's counter isn't reset when switching folders.
 12. **Check the preview.** A sample file name and any problems, such as a folder that already exists, appear above the buttons. Click **Preview file tree…** (⌘P) to see the whole folder tree in its own window, which follows your edits. Click **Create Session** to build it.
+13. **Presets.** Optional. **Presets** at the bottom left saves every setting in the window under a name (**Save Preset…**) and loads it again in one click, replacing what is in the window. **Delete Preset** removes one.
 
 ## Updating
 

@@ -4,6 +4,7 @@ All notable changes to CO SuperSession are listed here. Versions follow [Semanti
 
 ## Unreleased
 
+- Presets: the new Presets menu at the bottom left saves every setting in the window under a name (Save Preset…) and loads it in one click, for repeat clients and jobs. Delete Preset removes one
 - Names can't use / : \ * ? " < > | any more (only / and : were refused), since Windows, servers and cloud drives refuse or mangle them. In pasted lists these characters become separators, and names lose any leading or trailing dot
 - A name too long for macOS (over 255 bytes) is flagged before anything is created, and a note warns when a path in the session is long enough to fail on Windows
 - If creating the session fails partway, the alert says which step failed and that the session may be incomplete. Settings are now saved before the session is built, so a failed build keeps them

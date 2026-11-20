@@ -2,10 +2,6 @@
 
 Ideas for later versions, not yet scheduled. Each has to keep the [design requirements](README.md#design-requirements).
 
-## Named presets
-
-Save the whole setup under a name, such as "Halden lookbook" or "Lumara KV", and load it in one click. Settings already persist, but only those of the last run, so a repeat client means retyping levels, prefixes, lists and naming choices.
-
 ## Add to an existing session
 
 Pick an existing session and add level folders or shot folders to it with the same naming rules, for when a third day or extra looks are added mid-job. It must read the session's naming back (or store it in the session) so new folders match the old ones, and flag clashes with folders already there.

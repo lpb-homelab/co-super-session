@@ -155,7 +155,10 @@ property wantFileMode : 2 -- 1 simple (file prefix + counter), 2 all levels, 3 d
 property wantFilePrefix : "" -- typed file prefix; empty = client + job
 property folderModeIds : {1} -- ids behind the current folder naming popup items
 property numberingOrder : {2, 1, 3} -- shot numbering ids in menu order
-property modalCode : 0
+property modalCode : 0 -- 1 Create Session, 0 Cancel, 2 a preset was loaded (the window is built again)
+property presetPopup : missing value -- the Presets pull-down at the bottom left
+property curPreset : "" -- the preset loaded or saved last in this run, shown as the pull-down's title
+property prefSink : missing value -- while saving a preset, writePref fills this dictionary instead of the defaults
 property uiError : "" -- an error while building the window; Cocoa would swallow it, main reports it
 
 -- results of the last refresh, used by Create Session
@@ -191,32 +194,37 @@ on run
 end run
 
 on main()
-	set basePath to my readPref("path", POSIX path of (path to desktop folder))
-	if not my pathExists(basePath) then set basePath to POSIX path of (path to desktop folder)
-	set defPrefix to my readPref("prefix", "")
-	set defCount to my readPref("subnumber", "")
-	set wantNumbering to my clampInt(my prefInt("numbering", 2), 1, 3)
-	my setSeparators(my clampInt(my prefInt("separators", 1), 1, 4))
-	my readNamingPrefs()
-	set rowLevelPaths to {}
-	set rowNames to {}
-	set rowCounts to {}
-	set rowLists to {}
-	set rowSubs to {}
-	set rowExtra to {}
-	set rowOwnName to {}
-	set savedRows to my readSavedRows()
-	set modalCode to 0
-	set uiError to ""
+	set curPreset to ""
+	-- loading a preset writes it to the settings and builds the window again from them
+	repeat
+		set basePath to my readPref("path", POSIX path of (path to desktop folder))
+		if not my pathExists(basePath) then set basePath to POSIX path of (path to desktop folder)
+		set defPrefix to my readPref("prefix", "")
+		set defCount to my readPref("subnumber", "")
+		set wantNumbering to my clampInt(my prefInt("numbering", 2), 1, 3)
+		my setSeparators(my clampInt(my prefInt("separators", 1), 1, 4))
+		my readNamingPrefs()
+		set rowLevelPaths to {}
+		set rowNames to {}
+		set rowCounts to {}
+		set rowLists to {}
+		set rowSubs to {}
+		set rowExtra to {}
+		set rowOwnName to {}
+		set savedRows to my readSavedRows()
+		set modalCode to 0
+		set uiError to ""
 
-	-- Capture One runs scripts in a background osascript process; Cocoa UI must run on the main thread
-	if (current application's NSThread's isMainThread()) as boolean then
-		my showWindow:(missing value)
-	else
-		my performSelectorOnMainThread:"showWindow:" withObject:(missing value) waitUntilDone:true
-	end if
-	my releaseWindow()
-	if uiError is not "" then error uiError
+		-- Capture One runs scripts in a background osascript process; Cocoa UI must run on the main thread
+		if (current application's NSThread's isMainThread()) as boolean then
+			my showWindow:(missing value)
+		else
+			my performSelectorOnMainThread:"showWindow:" withObject:(missing value) waitUntilDone:true
+		end if
+		my releaseWindow()
+		if uiError is not "" then error uiError
+		if modalCode is not 2 then exit repeat
+	end repeat
 	if modalCode is not 1 then return
 
 	if prelightName is not "" then
@@ -226,7 +234,20 @@ on main()
 	else
 		set firstFolder to my lastComponent(item 1 of rShotNames)
 	end if
-	---------- REMEMBER SETTINGS (first, so a failed build keeps them) ----------
+	my saveSettings() -- first, so a failed build keeps them
+
+	-- with nothing missing from the folder names, [Name] isn't in the format; it still holds the job
+	set captureName to rCaptureName
+	if captureName is "" then set captureName to rJob
+	set copyrightNote to my buildSession((POSIX file basePath) as alias, rSession, captureName, rPhotog, rShotNames, rCaptureFormat)
+
+	set the clipboard to rSession
+	display notification "Capture into " & firstFolder & copyrightNote with title "Session " & rSession & " ready"
+end main
+
+-- Remembers the window's settings for the next run (or, with prefSink set, for a preset).
+-- Reads the results of the last refresh.
+on saveSettings()
 	my writePref("path", basePath)
 	my writePref("job", rJob) -- client + job combined
 	my writePref("client", rClientRaw)
@@ -287,15 +308,8 @@ on main()
 	my writePref("subnumber", saveCount)
 	if (count of rGroups) > 0 then my writePref("digits", rDigits as text)
 	my writePref("shotrows", my rowsText())
-
-	-- with nothing missing from the folder names, [Name] isn't in the format; it still holds the job
-	set captureName to rCaptureName
-	if captureName is "" then set captureName to rJob
-	set copyrightNote to my buildSession((POSIX file basePath) as alias, rSession, captureName, rPhotog, rShotNames, rCaptureFormat)
-
-	set the clipboard to rSession
-	display notification "Capture into " & firstFolder & copyrightNote with title "Session " & rSession & " ready"
-end main
+	my writePref("tablesort", rowSort)
+end saveSettings
 
 ---------- WINDOW ----------
 -- Errors in a handler called by Cocoa vanish silently, so catch them here for main to report
@@ -692,6 +706,10 @@ on buildWindow()
 	createBtn's setKeyEquivalent:return
 	createBtn's setToolTip:"Return"
 	cancelBtn's setAutoresizingMask:1 -- buttons stay at the right edge
+	set presetPopup to current application's NSPopUpButton's alloc()'s initWithFrame:{{17, 16}, {176, 26}} pullsDown:true
+	presetPopup's setToolTip:"Save every setting in the window under a name, or load one"
+	v's addSubview:presetPopup
+	my buildPresetMenu()
 	createBtn's setAutoresizingMask:1
 
 	set stretchy to {fClient, fJob, fLocation, level1Scroll, tblScroll, hint, fShotSubs, fFilePrefix}
@@ -2307,7 +2325,158 @@ on releaseWindow()
 	set {pNumbering, pFolderMode, pDigits, pCounter, previewView, createBtn} to {missing value, missing value, missing value, missing value, missing value, missing value}
 	set {cbFolderJob, cbFolderDate, pFileMode, fFilePrefix} to {missing value, missing value, missing value, missing value}
 	set previewIdx to 1
+	set presetPopup to missing value
 end releaseWindow
+
+---------- PRESETS ----------
+-- A preset is every setting the window remembers, saved under a name in the defaults
+-- ("presets": name -> {key: value}). Loading one writes it over the remembered settings
+-- and builds the window again from them.
+on buildPresetMenu()
+	set p to presetPopup
+	p's removeAllItems()
+	set m to p's |menu|()
+	set t to "Presets"
+	if curPreset is not "" then set t to "Preset: " & curPreset
+	my addPresetItem(m, t, 0, missing value) -- a pull-down shows its first item as its title
+	my addPresetItem(m, "Save Preset…", 1, missing value)
+	set names to my presetNames()
+	m's addItem:(current application's NSMenuItem's separatorItem())
+	if names is {} then
+		set mi to my addPresetItem(m, "No presets yet", 0, missing value)
+		mi's setAction:(missing value) -- greyed out
+		return
+	end if
+	repeat with n in names
+		my addPresetItem(m, contents of n, 2, contents of n)
+	end repeat
+	m's addItem:(current application's NSMenuItem's separatorItem())
+	set sm to current application's NSMenu's alloc()'s initWithTitle:"Delete Preset"
+	repeat with n in names
+		my addPresetItem(sm, (contents of n) & "…", 3, contents of n)
+	end repeat
+	set mi to my addPresetItem(m, "Delete Preset", 0, missing value)
+	mi's setAction:(missing value)
+	mi's setSubmenu:sm
+end buildPresetMenu
+
+on addPresetItem(m, t, tg, n)
+	set mi to current application's NSMenuItem's alloc()'s initWithTitle:t action:"presetChosen:" keyEquivalent:""
+	mi's setTarget:me
+	mi's setTag:tg
+	if n is not missing value then mi's setRepresentedObject:n
+	m's addItem:mi
+	return mi
+end addPresetItem
+
+-- Errors in a handler called by Cocoa vanish silently, so report them here
+on presetChosen:sender
+	try
+		set tg to (sender's tag()) as integer
+		if tg is 1 then
+			my savePreset()
+		else if tg is 2 then
+			my loadPreset((sender's representedObject()) as text)
+		else if tg is 3 then
+			my deletePreset((sender's representedObject()) as text)
+		end if
+	on error errMsg number errNum
+		if errNum is not -128 then my presetAlert("The preset couldn't be changed", errMsg, {"OK"})
+	end try
+end presetChosen:
+
+on savePreset()
+	win's makeFirstResponder:(missing value) -- commits a cell or field still being edited
+	my refresh()
+	set n to curPreset
+	if n is "" then set n to my trim(rClientRaw & " " & rJobRaw)
+	set n to my askPresetName(n)
+	if n is "" then return
+	set presets to my readPresets()
+	if (presets's objectForKey:n) is not missing value then
+		if my presetAlert("Replace the preset “" & n & "”?", "It will hold the settings in the window now.", {"Replace", "Cancel"}) is not 1 then return
+	end if
+	set prefSink to current application's NSMutableDictionary's dictionary()
+	try
+		my saveSettings()
+	on error errMsg number errNum
+		set prefSink to missing value
+		error errMsg number errNum
+	end try
+	set snap to prefSink
+	set prefSink to missing value
+	presets's setObject:snap forKey:n
+	my writePresets(presets)
+	set curPreset to n
+	my buildPresetMenu()
+end savePreset
+
+on loadPreset(n)
+	set snap to (my readPresets())'s objectForKey:n
+	if snap is missing value then return
+	repeat with k in (snap's allKeys() as list)
+		my writePref(k as text, (snap's objectForKey:k) as text)
+	end repeat
+	set curPreset to n
+	set modalCode to 2
+	current application's NSApplication's sharedApplication()'s stopModalWithCode:2
+end loadPreset
+
+on deletePreset(n)
+	if my presetAlert("Delete the preset “" & n & "”?", "This can't be undone. The settings in the window stay as they are.", {"Delete", "Cancel"}) is not 1 then return
+	set presets to my readPresets()
+	presets's removeObjectForKey:n
+	my writePresets(presets)
+	if curPreset is n then set curPreset to ""
+	my buildPresetMenu()
+end deletePreset
+
+-- the name typed, trimmed; "" when cancelled or empty
+on askPresetName(defaultName)
+	set a to current application's NSAlert's alloc()'s init()
+	a's setMessageText:"Save preset"
+	a's setInformativeText:"Saves every setting in the window, from client to file names, under this name."
+	a's addButtonWithTitle:"Save"
+	a's addButtonWithTitle:"Cancel"
+	set tf to current application's NSTextField's alloc()'s initWithFrame:{{0, 0}, {260, 24}}
+	tf's setStringValue:defaultName
+	tf's setPlaceholderString:"e.g. Lumara KV"
+	a's setAccessoryView:tf
+	a's layout()
+	a's |window|()'s setInitialFirstResponder:tf
+	if ((a's runModal()) as integer) is not 1000 then return ""
+	return my trim((tf's stringValue()) as text)
+end askPresetName
+
+-- the number of the button clicked, from 1
+on presetAlert(msg, info, buttons)
+	set a to current application's NSAlert's alloc()'s init()
+	a's setMessageText:msg
+	a's setInformativeText:info
+	repeat with b in buttons
+		a's addButtonWithTitle:(contents of b)
+	end repeat
+	-- red by colour only: setHasDestructiveAction makes macOS ignore the first clicks on it
+	if item 1 of buttons is "Delete" then (item 1 of (a's buttons() as list))'s setBezelColor:(current application's NSColor's systemRedColor())
+	return ((a's runModal()) as integer) - 999
+end presetAlert
+
+on readPresets()
+	set d to current application's NSUserDefaults's alloc()'s initWithSuiteName:prefsDomain
+	set p to d's dictionaryForKey:"presets"
+	if p is missing value then return current application's NSMutableDictionary's dictionary()
+	return p's mutableCopy()
+end readPresets
+
+on writePresets(p)
+	set d to current application's NSUserDefaults's alloc()'s initWithSuiteName:prefsDomain
+	d's setObject:p forKey:"presets"
+	d's synchronize()
+end writePresets
+
+on presetNames()
+	return ((my readPresets())'s allKeys()'s sortedArrayUsingSelector:"localizedStandardCompare:") as list
+end presetNames
 
 ---------- WINDOW HELPERS ----------
 -- osascript has no menu bar, so ⌘C/⌘V/⌘X/⌘A/⌘Z do nothing in text fields;
@@ -2890,6 +3059,10 @@ on readPref(k, fallback)
 end readPref
 
 on writePref(k, v)
+	if prefSink is not missing value then
+		prefSink's setObject:(v as text) forKey:k
+		return
+	end if
 	set d to current application's NSUserDefaults's alloc()'s initWithSuiteName:prefsDomain
 	d's setObject:(v as text) forKey:k
 	d's synchronize()
