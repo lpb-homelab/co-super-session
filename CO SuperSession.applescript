@@ -18,7 +18,7 @@ use framework "Foundation"
 use framework "AppKit"
 use scripting additions
 
-property scriptVersion : "0.4.0" -- bump on every release, matching the git tag (vX.Y.Z)
+property scriptVersion : "0.3.1" -- bump on every release, matching the git tag (vX.Y.Z)
 
 ---------- SETTINGS (edit to taste) ----------
 property prefsDomain : "com.lpb.COSession"
